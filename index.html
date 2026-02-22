@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bayleys Property Survey System</title>
+    
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js"></script>
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css" type="text/css">
+    
+    <style>
+        /* BASE STYLES */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; height: 100vh; width: 100vw; overflow: hidden; background: #1a1a2e; color: #1a202c; }
+
+        /* DEBUG CONSOLE */
+        #debugConsole {
+            position: fixed; bottom: 10px; right: 10px; width: 300px;
+            background: rgba(0,0,0,0.85); color: #00ff9d; font-family: monospace; font-size: 11px;
+            padding: 12px; border-radius: 6px; z-index: 9999; pointer-events: none;
+            border-left: 4px solid #00ff9d;
+        }
+
+        /* SCREENS */
+        .screen { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        .screen.active { display: flex; z-index: 10; }
+
+        /* LOGIN */
+        #loginScreen { background: #1a1a2e; }
+        #loginScreen.active { display: block; }
+        #loginMapBackground { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 0; opacity: 0.6; }
+        
+        .login-card {
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            background: white; border-radius: 8px; padding: 40px; width: 380px; text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5); z-index: 10;
+        }
+        .login-header h1 { font-size: 28px; font-weight: 800; color: #00264b; margin-bottom: 5px; }
+        .login-header p { font-size: 13px; color: #666; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        .form-label { display: block; font-size: 11px; font-weight: 700; color: #4a5568; margin-bottom: 6px; text-transform: uppercase; }
+        .form-input { width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; }
+        .btn-access { width: 100%; padding: 14px; background: #00264b; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+        .btn-access:hover { background: #001d3a; }
+
+        /* DASHBOARD LAYOUT */
+        .sidebar { width: 340px; background: white; display: flex; flex-direction: column; z-index: 20; box-shadow: 4px 0 24px rgba(0,0,0,0.1); height: 100vh; }
+        .main-content { flex: 1; position: relative; height: 100vh; background: #e2e8f0; }
+        
+        /* SIDEBAR HEADER */
+        .sidebar-header { 
+            padding: 0; 
+            background: #00264b; 
+            color: white; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+        
+        .sidebar-logo-container { 
+            background: white; 
+            width: 100%; 
+            padding: 20px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            box-sizing: border-box; 
+        }
+        
+        .sidebar-logo-container img { 
+            width: 100%; 
+            height: auto; 
+            max-height: 80px; 
+            display: block; 
+            object-fit: contain; 
+        }
+
+        .sidebar-header p {
+            margin: 0;
+            padding: 12px 0;
+            opacity: 0.8; 
+            font-size: 10px; 
+            letter-spacing: 1.5px; 
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .user-profile { padding: 16px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .avatar { width: 32px; height: 32px; background: #00264b; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; }
+        .logout-link { font-size: 10px; color: #e53e3e; font-weight: 700; cursor: pointer; }
+        
+        /* FILTER BAR */
+        .filter-bar { display: flex; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; gap: 8px; background: #fff; overflow-x: auto; }
+        .filter-btn { 
+            border: 1px solid #e2e8f0; background: white; padding: 6px 12px; border-radius: 15px; 
+            font-size: 10px; font-weight: 700; color: #4a5568; cursor: pointer; transition: 0.2s; white-space: nowrap;
+        }
+        .filter-btn.active { background: #00264b; color: white; border-color: #00264b; }
+
+        .sidebar-scroll { flex: 1; overflow-y: auto; padding: 16px; }
+        .card-item { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px; cursor: pointer; transition: 0.2s; position: relative; }
+        .card-item:hover { border-color: #00264b; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .premise-card-image { height: 140px; background: #ddd; border-radius: 6px; margin-bottom: 10px; overflow: hidden; position: relative; }
+        .premise-card-image img { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* ---------------------------------------------------- */
+        /* MODERN OUTLINED STATUS TAGS                         */
+        /* ---------------------------------------------------- */
+        
+        .status-pill, select.status-select { 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 9px; font-weight: 600; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+            background: white; 
+            border: 1px solid transparent; 
+            white-space: nowrap;
+        }
+
+        /* Sidebar Cards (Top Right Corner) */
+        .premise-card-image .status-pill { 
+            position: absolute; top: 8px; right: 8px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+        }
+
+        /* Table Cells */
+        .reports-table .status-pill, .reports-table .status-select {
+            position: relative; display: inline-block;
+        }
+
+        .status-pill { pointer-events: none; }
+
+        /* Admin Dropdown */
+        select.status-select {
+            appearance: none; -webkit-appearance: none; -moz-appearance: none;
+            cursor: pointer; padding-right: 12px; outline: none; transition: all 0.2s ease;
+            background-repeat: no-repeat; background-position: right 8px center; background-size: 10px auto;
+        }
+        select.status-select:hover { background-color: #f7fafc; }
+        
+        /* --- THEMED COLORS (Border & Text) --- */
+        /* Completed (Green) */
+        .completed-status, .status-pill.completed, .status-select.completed { 
+            border-color: #b2e09e; color: #52634b;
+        }
+
+        /* Invoiced (Red/Pink) */
+        .invoiced-status, .status-pill.invoiced, .status-select.invoiced { 
+            border-color: #ff3860; color: #490311; 
+        }
+
+        /* Pending (Brown/Tan) */
+        .pending-status, .status-pill.pending, .status-select.pending {
+            border-color: #a99579; color: #a99579; 
+        }
+
+        /* Inspected (Orange/Gold) */
+        .inspected-status, .status-pill.inspected, .status-select.inspected { 
+            border-color: #ffa21f; color: #7d5217;
+        }
+
+        /* New (Teal) */
+        .new-status, .status-pill.new, .status-select.new { 
+            border-color: #98d7d0; color: #3f736d;
+        }
+
+        /* Reported (Purple) */
+        .reported-status, .status-pill.reported, .status-select.reported { 
+            border-color: #796fd3; color: #443a92; 
+        }
+
+        .card-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; color: #00264b; }
+        .card-meta { font-size: 11px; color: #666; font-weight: 500; }
+
+        #adminMap, #premisesMap { width: 100%; height: 100%; }
+        
+        /* DETAIL PANEL */
+        .detail-panel { position: absolute; top: 20px; left: 20px; bottom: 20px; width: 450px; background: white; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); z-index: 50; display: none; flex-direction: column; overflow: hidden; }
+        .detail-panel.active { display: flex; }
+        
+        .detail-image { width: 100%; height: 360px; background: #000; position: relative; overflow: hidden; } 
+        .detail-image img { width: 100%; height: 100%; object-fit: cover; opacity: 0.9; transition: opacity 0.3s; }
+        
+        .video-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3); cursor: pointer; z-index: 10; }
+        .video-overlay:hover { transform: translate(-50%, -50%) scale(1.1); }
+
+        .close-detail { position: absolute; top: 15px; left: 15px; width: 32px; height: 32px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 20; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        
+        /* GALLERY CONTROLS */
+        .gallery-nav { position: absolute; top: 0; bottom: 0; width: 60px; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; opacity: 0; transition: 0.2s; background: rgba(0,0,0,0.1); color: white; font-size: 24px; font-weight: 800; }
+        .detail-image:hover .gallery-nav { opacity: 1; }
+        .gallery-nav:hover { background: rgba(0,0,0,0.4); }
+        .gallery-prev { left: 0; }
+        .gallery-next { right: 0; }
+        .gallery-counter { position: absolute; bottom: 15px; right: 15px; background: rgba(0,0,0,0.6); color: white; padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; z-index: 5; }
+
+        .detail-content { padding: 24px; overflow-y: auto; flex: 1; }
+        .detail-title { font-size: 22px; font-weight: 800; color: #1a202c; margin-bottom: 4px; }
+        
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+        .data-label { font-size: 10px; color: #718096; font-weight: 700; text-transform: uppercase; }
+        .data-value { font-size: 14px; font-weight: 600; color: #2d3748; }
+        
+        .reports-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .reports-table th { text-align: left; font-size: 9px; color: #718096; padding: 8px 4px; border-bottom: 1px solid #e2e8f0; text-transform: uppercase; }
+        .reports-table td { font-size: 12px; padding: 12px 4px; border-bottom: 1px solid #f7fafc; vertical-align: middle; }
+        
+        .icon-btn { color: #4a5568; transition: 0.2s; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; }
+        .icon-btn:hover { background: #edf2f7; color: #00264b; }
+        .icon-btn svg { width: 18px; height: 18px; }
+
+        .back-btn { font-size: 10px; color: #3182ce; font-weight: 700; cursor: pointer; float: right; padding: 10px; }
+        
+        .marker-selected { width: 50px; height: 50px; background: white; border: 3px solid white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s; }
+        .marker-selected:hover { transform: scale(1.1); z-index: 100; }
+        .marker-selected img { width: 100%; height: 100%; object-fit: cover; }
+
+        .marker-dot { width: 20px; height: 20px; background: #00264b; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 5px rgba(0,0,0,0.3); cursor: pointer; transition: transform 0.2s; }
+        .marker-dot:hover { transform: scale(1.2); }
+
+        #requestReportBtn { position: fixed; bottom: 30px; right: 30px; z-index: 100; display: none; }
+        .btn-float { background: white; border: none; padding: 14px 28px; border-radius: 10px; font-weight: 800; color: #00264b; box-shadow: 0 10px 25px rgba(0,0,0,0.25); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-float:hover { transform: translateY(-2px); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
+
+        /* MODERN MAPBOX CONTROLS */
+        .mapboxgl-ctrl-geocoder { box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important; border-radius: 8px !important; border: 1px solid white !important; width: 320px !important; max-width: 320px !important; margin: 20px 20px 0 0 !important; height: 44px !important; display: flex !important; align-items: center !important; background: white !important; }
+        .mapboxgl-ctrl-geocoder--input { padding-left: 36px !important; height: 100% !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; font-size: 14px !important; color: #1a202c !important; }
+        .mapboxgl-ctrl-geocoder--icon-search { top: 10px !important; left: 10px !important; fill: #00264b !important; }
+        .mapboxgl-ctrl-group { background: transparent !important; box-shadow: none !important; border: none !important; margin-right: 20px !important; margin-top: 12px !important; display: flex !important; flex-direction: column !important; gap: 10px !important; }
+        .mapboxgl-ctrl-group button { background: white !important; width: 36px !important; height: 36px !important; border-radius: 8px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important; border: 1px solid white !important; transition: 0.2s !important; }
+        .mapboxgl-ctrl-group button:hover { background: #f7fafc !important; transform: translateY(-1px); }
+        .mapboxgl-ctrl-group > button + button { border-top: 1px solid white !important; }
+    </style>
+</head>
+<body>
+
+    <div id="debugConsole">Initializing...</div>
+
+    <div id="adminTools" style="display:none; padding: 20px; border-top: 1px solid #eee; background: #f8fafc;">
+        <button id="autoFixBtn" class="btn-access" style="background: #2b6cb0; font-size: 12px; padding: 10px;">Auto-Find Missing Coordinates</button>
+        <div id="fixStatus" style="font-size:10px; color:#666; margin-top:5px; text-align:center;"></div>
+    </div>
+
+    <div id="requestReportBtn">
+        <button class="btn-float" onclick="alert('Report request feature coming soon!')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>Request a Report
+        </button>
+    </div>
+
+    <div id="loginScreen" class="screen active">
+        <div id="loginMapBackground"></div>
+        <div class="login-card">
+            <div class="login-header"><h1>BAYLEYS</h1><p>Property Survey System</p></div>
+            <form id="loginForm">
+                <div class="form-group"><label class="form-label">User ID</label><input type="text" class="form-input" id="userId" placeholder="Centuria" required></div>
+                <div class="form-group"><label class="form-label">Password</label><input type="password" class="form-input" id="userPassword" placeholder="cent123" required></div>
+                <button type="submit" class="btn-access" id="loginBtn">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="clientListScreen" class="screen">
+        <div class="sidebar">
+            <div class="sidebar-header"><h1>BAYLEYS</h1><p>Admin Console</p></div>
+            <div class="user-profile">
+                <div style="display:flex; gap:10px; align-items:center;"><div class="avatar">BA</div><div><div style="font-size:13px; font-weight:700;">Bayleys Admin</div><div style="font-size:10px; color:#666;">ADMINISTRATOR</div></div></div>
+                <div class="logout-link" onclick="window.location.reload()">LOGOUT</div>
+            </div>
+            
+            <div class="filter-bar">
+                <div class="filter-btn active" onclick="filterAdminView('clients')">Clients</div>
+                <div class="filter-btn" onclick="filterAdminView('premises')">Premises</div>
+                <div class="filter-btn" onclick="filterAdminView('reports')">Reports</div>
+            </div>
+
+            <div class="sidebar-scroll" id="clientList">Loading...</div>
+        </div>
+        <div class="main-content"><div id="adminMap"></div></div>
+    </div>
+
+    <div id="premisesScreen" class="screen">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo-container"><img id="brandLogo" src="" alt="Client Logo"></div>
+                <p>PORTFOLIO ACCESS</p>
+            </div>
+            <div class="user-profile">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <div class="avatar" id="userAvatar">U</div>
+                    <div><div style="font-size:13px; font-weight:700;" id="userNameDisplay">Client Name</div><div style="font-size:10px; color:#666;">CLIENT VIEW</div></div>
+                </div>
+                <div class="logout-link" onclick="window.location.reload()">LOGOUT</div>
+            </div>
+            <div class="back-btn" id="backToAdminBtn" style="display:none;">← BACK TO ADMIN</div>
+            <div class="sidebar-scroll" id="premisesList">Loading...</div>
+        </div>
+        <div class="main-content">
+            <div id="premisesMap"></div>
+            
+            <div id="propertyDetailPanel" class="detail-panel">
+                <div class="detail-image">
+                    <img id="detailImg" src="">
+                    
+                    <div class="gallery-nav gallery-prev" id="prevImgBtn">‹</div>
+                    <div class="gallery-nav gallery-next" id="nextImgBtn">›</div>
+                    <div class="gallery-counter" id="imgCounter">1 / 1</div>
+
+                    <div class="video-overlay" id="videoBtn"><div class="play-button"><svg width="24" height="24" viewBox="0 0 24 24" fill="#00264b"><path d="M8 5v14l11-7z"/></svg></div></div>
+                    <div class="close-detail" id="closeDetailBtn">✕</div>
+                </div>
+                <div class="detail-content">
+                    <h2 class="detail-title" id="detailTitle">Property Name</h2>
+                    <div style="font-size:13px; color:#666; margin-bottom:20px;" id="detailAddress">Address</div>
+                    <div class="detail-grid">
+                        <div><div class="data-label">Floor Area</div><div class="data-value" id="detailFloor">-</div></div>
+                        <div><div class="data-label">Site Area</div><div class="data-value" id="detailSite">-</div></div>
+                        <div><div class="data-label">Sector</div><div class="data-value" id="detailSector">-</div></div>
+                        <div><div class="data-label">Age</div><div class="data-value" id="detailAge">-</div></div>
+                        <div><div class="data-label">Condition</div><div class="data-value" id="detailCond">-</div></div>
+                        <div><div class="data-label">Surveyed By</div><div class="data-value" id="detailSurveyor">-</div></div>
+                        <div><div class="data-label">Last Inspected</div><div class="data-value" id="detailInspected">-</div></div>
+                        <div><div class="data-label">Delivered</div><div class="data-value" id="detailDelivery">-</div></div>
+                    </div>
+                    <div style="font-size:12px; font-weight:800; color:#00264b; margin-top:30px; border-bottom:1px solid #eee; padding-bottom:10px;">REPORTS & DOCUMENTS</div>
+                    <table class="reports-table">
+                        <thead><tr><th>Property</th><th>Type</th><th>Job #</th><th>Status</th><th>PDF</th><th>INFO</th><th>INV</th></tr></thead>
+                        <tbody id="reportsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+
+        const SUPABASE_URL = 'https://qppsjxvkoihirzicllvg.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwcHNqeHZrb2loaXJ6aWNsbHZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MTg1OTEsImV4cCI6MjA4NjQ5NDU5MX0.aG7O5llSU-VdovwInmDZabvTtOQNPs2aay5cIU1How0';
+        const MAPBOX_TOKEN = 'pk.eyJ1IjoiZ2hpei1jIiwiYSI6ImNtbGg5dTQ0NDA3MDMzbm9wYno5cDlpcncifQ.W9gY5wfXsD6gYfSw-mJ27Q';
+        
+        // --- CUSTOM MAPBOX STYLE ---
+        const MAP_STYLE = 'mapbox://styles/ghiz-c/cmlfsxnyd001f01sq90hedu7z';
+
+        // --- STATUS CONSTANTS ---
+        const STATUS_OPTIONS = ['New', 'Inspected', 'Reported', 'Invoiced', 'Completed', 'Pending'];
+
+        const logBox = document.getElementById('debugConsole');
+        function log(msg) { console.log(msg); logBox.innerText = msg; }
+
+        let supabase, mapInstance, clientsData = [], premisesData = [], allReportsData = [], currentUser = null;
+        
+        // GALLERY STATE
+        let currentGalleryImages = [];
+        let currentGalleryIndex = 0;
+
+        // --- GLOBAL FUNCTION FOR STATUS UPDATES ---
+        window.updateReportStatus = async (reportId, newStatus, selectElement) => {
+            if (!currentUser || currentUser.role !== 'admin') return;
+            
+            // 1. Visually update immediately
+            selectElement.className = `status-select ${newStatus.toLowerCase()}`;
+            selectElement.blur(); // Remove focus
+
+            // 2. Update Database
+            try {
+                const { error } = await supabase
+                    .from('reports')
+                    .update({ status: newStatus })
+                    .eq('id', reportId);
+                
+                if (error) throw error;
+                log(`Status updated to ${newStatus}`);
+                
+                // 3. Refresh Data (Silent Refresh)
+                const { data: r } = await supabase.from('reports').select('*');
+                if (r) {
+                    allReportsData = r;
+                }
+            } catch (err) {
+                alert("Update failed: " + err.message);
+            }
+        };
+
+        // HELPER: Get Data for Display
+        function getPremiseDisplayData(p) {
+            const reports = p.reports || allReportsData.filter(r => r.premise_id === p.id) || [];
+            reports.sort((a, b) => (Number(b.job_number) || 0) - (Number(a.job_number) || 0));
+            const latest = reports.length > 0 ? reports[0] : {};
+            
+            let rawImages = latest.image_url; 
+            let images = [];
+            
+            if (Array.isArray(rawImages)) {
+                images = rawImages;
+            } else if (typeof rawImages === 'string' && rawImages.trim() !== '') {
+                images = rawImages.includes(',') ? rawImages.split(',').map(s=>s.trim()) : [rawImages];
+            }
+            if (images.length === 0) images = []; 
+
+            const displayImage = images.length > 0 ? images[0] : null;
+            const status = latest.status || 'Active';
+            const condition = latest.condition || p.condition || '-';
+            
+            return { reports, latest, images, displayImage, status, condition };
+        }
+
+        window.onload = async () => {
+            log("System starting...");
+            try {
+                mapboxgl.accessToken = MAPBOX_TOKEN;
+                initMap('loginMapBackground', [174.7633, -36.8485], 13);
+                supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+                const { count, error } = await supabase.from('clients').select('*', { count: 'exact', head: true });
+                if (error) throw error;
+                log(`System Ready. (DB connected)`);
+            } catch(e) { log("DB Error: " + e.message); }
+        };
+
+        function initMap(container, center, zoom) {
+            if (mapInstance) mapInstance.remove();
+            mapInstance = new mapboxgl.Map({ container, style: MAP_STYLE, center, zoom, pitch: 60, bearing: -17.6, antialias: true });
+
+            mapInstance.on('load', () => {
+                mapInstance.addSource('mapbox-dem', { 'type': 'raster-dem', 'url': 'mapbox://mapbox.mapbox-terrain-dem-v1', 'tileSize': 512, 'maxzoom': 14 });
+                mapInstance.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+                const layers = mapInstance.getStyle().layers;
+                const labelLayerId = layers.find((layer) => layer.type === 'symbol' && layer.layout['text-field'])?.id;
+                
+                // --- DARK 3D BUILDINGS (MATCHING NIGHT MODE) ---
+                mapInstance.addLayer({
+                    'id': 'add-3d-buildings',
+                    'source': 'composite',
+                    'source-layer': 'building',
+                    'filter': ['==', 'extrude', 'true'],
+                    'type': 'fill-extrusion',
+                    'minzoom': 15,
+                    'paint': {
+                        'fill-extrusion-color': '#1a1a1a', 
+                        'fill-extrusion-height': ['get', 'height'],
+                        'fill-extrusion-base': ['get', 'min_height'],
+                        'fill-extrusion-opacity': 0.9
+                    }
+                }, labelLayerId);
+            });
+
+            if (container !== 'loginMapBackground') {
+                const localGeocoder = (query) => {
+                    const matches = premisesData.filter(p => {
+                        const { latest } = getPremiseDisplayData(p);
+                        return p.name.toLowerCase().includes(query.toLowerCase()) || 
+                               p.address.toLowerCase().includes(query.toLowerCase()) || 
+                               p.sector.toLowerCase().includes(query.toLowerCase()) ||
+                               (latest.report_type && latest.report_type.toLowerCase().includes(query.toLowerCase())) ||
+                               (latest.name && latest.name.toLowerCase().includes(query.toLowerCase()));
+                    });
+                    return matches.map(m => ({ text: m.name, place_name: m.address, center: [m.lng, m.lat], properties: m }));
+                };
+                const geocoder = new MapboxGeocoder({ accessToken: MAPBOX_TOKEN, mapboxgl: mapboxgl, marker: false, localGeocoder: localGeocoder, placeholder: 'Search premises, addresses...' });
+                mapInstance.addControl(geocoder, 'top-right');
+                mapInstance.addControl(new mapboxgl.NavigationControl(), 'top-right');
+                geocoder.on('result', (e) => showDetail(e.result.properties));
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const rawInput = document.getElementById('userId').value.trim();
+            const pass = document.getElementById('userPassword').value;
+            const btn = document.getElementById('loginBtn');
+            btn.textContent = "Verifying...";
+
+            try {
+                const fakeEmail = `${rawInput}@bayleys.co.nz`; 
+                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: fakeEmail, password: pass });
+                if (authError) throw new Error("Incorrect Username or Password");
+                const userId = authData.user.id;
+                const { data: clientData } = await supabase.from('clients').select('*').eq('id', userId).single();
+
+                if (clientData) {
+                    currentUser = { role: 'client', ...clientData };
+                    await fetchClientPremises(currentUser.id);
+                    switchScreen('premisesScreen');
+                    loadClientView();
+                } else {
+                    currentUser = { role: 'admin', name: 'Bayleys Admin' };
+                    document.querySelector('#clientListScreen .sidebar').appendChild(document.getElementById('adminTools'));
+                    document.getElementById('adminTools').style.display = 'block';
+                    await fetchAdminData();
+                    switchScreen('clientListScreen');
+                    window.filterAdminView('clients'); 
+                }
+            } catch (err) { log("Login Error: " + err.message); alert(err.message); btn.textContent = "Login"; }
+        });
+
+        async function fetchAdminData() {
+            log("Fetching data...");
+            const { data: c } = await supabase.from('clients').select('*');
+            const { data: r } = await supabase.from('reports').select('*');
+            const { data: p } = await supabase.from('premises').select('*');
+            allReportsData = r || [];
+            premisesData = p || [];
+            clientsData = (c || []).map(client => {
+                const clientReports = allReportsData.filter(x => x.client_id === client.id);
+                const uniquePremises = new Set(clientReports.map(rep => rep.premise_id));
+                const activeCount = clientReports.filter(j => j.status !== 'Completed').length;
+                return { ...client, count: uniquePremises.size, active: activeCount };
+            });
+            if (mapInstance) addMarkers(premisesData);
+        }
+
+        async function fetchClientPremises(cid) {
+            let query = supabase.from('premises').select('*, reports!inner(*)').eq('reports.client_id', cid);
+            const { data, error } = await query;
+            if (error) { log("Error: " + error.message); return; }
+            premisesData = data || [];
+            if (mapInstance) addMarkers(premisesData);
+        }
+
+        window.filterAdminView = (type) => {
+            const list = document.getElementById('clientList');
+            const btns = document.querySelectorAll('.filter-btn');
+            btns.forEach(b => b.classList.remove('active'));
+            
+            if (type === 'clients') {
+                btns[0].classList.add('active');
+                list.innerHTML = clientsData.map(c => `
+                    <div class="card-item client-card" data-id="${c.id}">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <img src="${c.logo_url}" style="width:30px; height:30px; object-fit:contain;">
+                                <div><div style="font-weight:700; font-size:14px;">${c.name}</div><div style="font-size:11px; color:#666;">${c.count} Premises</div></div>
+                            </div>
+                        </div>
+                    </div>`).join('');
+                document.querySelectorAll('.client-card').forEach(card => {
+                    card.addEventListener('click', async () => {
+                        const client = clientsData.find(c => c.id === card.dataset.id);
+                        currentUser = { role: 'admin', ...client };
+                        document.getElementById('backToAdminBtn').style.display = 'block';
+                        await fetchClientPremises(client.id);
+                        switchScreen('premisesScreen');
+                        loadClientView();
+                    });
+                });
+            } else if (type === 'premises') {
+                btns[1].classList.add('active');
+                list.innerHTML = premisesData.map(p => {
+                    const { displayImage } = getPremiseDisplayData(p);
+                    const thumb = displayImage ? `<img src="${displayImage}" style="width:40px; height:40px; border-radius:4px; object-fit:cover;">` : `<div style="width:40px; height:40px; background:#00264b; border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:8px;">●</div>`;
+                    return `<div class="card-item premise-card-admin" data-id="${p.id}"><div style="display:flex; gap:10px; align-items:center;">${thumb}<div><div style="font-weight:700; font-size:13px;">${p.name}</div><div style="font-size:10px; color:#666;">${p.address}</div></div></div></div>`;
+                }).join('');
+                document.querySelectorAll('.premise-card-admin').forEach(card => {
+                    card.addEventListener('click', () => {
+                        showDetail(premisesData.find(x => x.id === card.dataset.id));
+                    });
+                });
+            } else if (type === 'reports') {
+                btns[2].classList.add('active');
+                const sortedReports = [...allReportsData].sort((a,b) => (Number(b.job_number)||0) - (Number(a.job_number)||0));
+                
+                list.innerHTML = sortedReports.map(r => {
+                    // Pull report specific name, or fallback to premise name
+                    const matchingPremise = premisesData.find(p => p.id === r.premise_id);
+                    const displayName = r.name || (matchingPremise ? matchingPremise.name : 'Unknown Property');
+
+                    return `
+                    <div class="card-item report-card-admin" data-pid="${r.premise_id}">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:11px; font-weight:700; color:#2d3748;">${displayName}</div>
+                                <div style="font-weight:700; font-size:13px; color:#00264b;">Job #${r.job_number}</div>
+                                <div style="font-size:10px; color:#666;">${r.report_type}</div>
+                            </div>
+                            <div class="status-pill ${r.status?.toLowerCase()}" style="position:static;">${r.status}</div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                document.querySelectorAll('.report-card-admin').forEach(card => {
+                    card.addEventListener('click', () => {
+                        const p = premisesData.find(x => x.id === card.dataset.pid);
+                        if(p) showDetail(p);
+                    });
+                });
+            }
+        };
+
+        // --- AUTO-FIX ---
+        document.getElementById('autoFixBtn').addEventListener('click', async () => {
+            const statusLabel = document.getElementById('fixStatus');
+            const btn = document.getElementById('autoFixBtn');
+            if (!currentUser || currentUser.role !== 'admin') return alert("Only Admins can perform database updates.");
+            try {
+                btn.disabled = true; btn.textContent = "Scanning Database...";
+                const { data: missingList } = await supabase.from('premises').select('*').is('lat', null);
+                if (!missingList || missingList.length === 0) { statusLabel.innerText = "All premises have coordinates!"; setTimeout(() => { btn.disabled = false; btn.textContent = "Auto-Find Missing Coordinates"; }, 2000); return; }
+                statusLabel.innerText = `Found ${missingList.length} missing. Fixing...`;
+                let fixedCount = 0;
+                for (const p of missingList) {
+                    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(p.address)}.json?access_token=${MAPBOX_TOKEN}&country=nz&limit=1`;
+                    const res = await fetch(url);
+                    const json = await res.json();
+                    if (json.features && json.features.length > 0) {
+                        const [lng, lat] = json.features[0].center;
+                        await supabase.from('premises').update({ lat, lng }).eq('id', p.id);
+                        fixedCount++;
+                        statusLabel.innerText = `Fixed ${fixedCount} / ${missingList.length}: ${p.name}`;
+                    }
+                    await new Promise(r => setTimeout(r, 200)); 
+                }
+                statusLabel.innerText = `Complete! Updated ${fixedCount} premises.`;
+                btn.textContent = "Update Complete";
+                await fetchAdminData(); 
+            } catch (err) { console.error(err); statusLabel.innerText = "Error: " + err.message; } finally { btn.disabled = false; }
+        });
+
+        // --- RENDER LOGIC ---
+        function switchScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById(id).classList.add('active');
+            document.getElementById('requestReportBtn').style.display = (id === 'premisesScreen') ? 'block' : 'none';
+            setTimeout(() => {
+                initMap(id === 'clientListScreen' ? 'adminMap' : 'premisesMap', [174.7633, -36.8485], 13);
+                if (premisesData.length > 0) addMarkers(premisesData);
+            }, 500);
+        }
+
+        function loadAdminDashboard() {
+            filterAdminView('clients');
+        }
+
+        function loadClientView() {
+            document.getElementById('brandLogo').src = currentUser.logo_url;
+            document.getElementById('userNameDisplay').innerText = currentUser.name;
+            document.getElementById('userAvatar').innerText = currentUser.name.substring(0,2).toUpperCase();
+            if (currentUser.role === 'client') document.getElementById('backToAdminBtn').style.display = 'none';
+
+            const list = document.getElementById('premisesList');
+            list.innerHTML = premisesData.map(p => {
+                const { displayImage, status, condition } = getPremiseDisplayData(p);
+                return `<div class="card-item premise-card" data-id="${p.id}">
+                    <div class="premise-card-image"><img src="${displayImage || 'https://via.placeholder.com/400x300?text=No+Image'}"><div class="status-pill ${status.toLowerCase()}">${status}</div></div>
+                    <div class="card-title">${p.name}</div><div class="card-meta">${p.floor_area} • ${p.sector} • ${condition}</div>
+                </div>`}).join('');
+            document.querySelectorAll('.premise-card').forEach(card => card.onclick = () => showDetail(premisesData.find(x => x.id === card.dataset.id)));
+        }
+
+        function addMarkers(list) {
+            list.forEach(p => {
+                if (p.lat && p.lng) {
+                    const { displayImage } = getPremiseDisplayData(p);
+                    const el = document.createElement('div');
+                    if (displayImage) { el.className = 'marker-selected'; el.innerHTML = `<img src="${displayImage}" onerror="this.style.display='none';this.parentElement.className='marker-dot'">`; } 
+                    else { el.className = 'marker-dot'; }
+                    el.onclick = () => showDetail(p);
+                    new mapboxgl.Marker(el).setLngLat([p.lng, p.lat]).addTo(mapInstance);
+                }
+            });
+            if (list.length > 0 && list[0].lat) mapInstance.flyTo({ center: [list[0].lng, list[0].lat], zoom: 14 });
+        }
+
+        // --- GALLERY & DETAIL ---
+        function showDetail(p) {
+            const { reports, latest, images, displayImage, status, condition } = getPremiseDisplayData(p);
+            
+            document.getElementById('propertyDetailPanel').classList.add('active');
+            
+            // INIT GALLERY
+            currentGalleryImages = images.length > 0 ? images : ['https://via.placeholder.com/450x360?text=No+Image'];
+            currentGalleryIndex = 0;
+            updateGalleryImage();
+
+            document.getElementById('detailTitle').innerText = p.name;
+            document.getElementById('detailAddress').innerText = p.address;
+            document.getElementById('detailFloor').innerText = p.floor_area;
+            document.getElementById('detailSite').innerText = p.site_area;
+            document.getElementById('detailSector').innerText = p.sector;
+            
+            const currentYear = new Date().getFullYear(); 
+            document.getElementById('detailAge').innerText = p.year_built ? `${currentYear - p.year_built} Years` : '-';
+            
+            document.getElementById('detailCond').innerText = condition;
+            document.getElementById('detailSurveyor').innerText = latest.surveyed_by || '-';
+            document.getElementById('detailInspected').innerText = latest.inspection_date || '-';
+            document.getElementById('detailDelivery').innerText = latest.delivery_date || '-';
+
+            document.getElementById('videoBtn').style.display = latest.video_url ? 'flex' : 'none';
+            document.getElementById('videoBtn').onclick = () => window.open(latest.video_url, '_blank');
+
+            const tbody = document.getElementById('reportsTableBody');
+            
+            // CHECK IF ADMIN TO MAKE EDITABLE
+            const isAdmin = currentUser && currentUser.role === 'admin';
+
+            tbody.innerHTML = reports.map(r => {
+                const pdfIcon = r.pdf_url ? `<a href="${r.pdf_url}" target="_blank" class="icon-btn" title="View PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></a>` : '-';
+                const infoIcon = r.info_url ? `<a href="${r.info_url}" target="_blank" class="icon-btn" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></a>` : '-';
+                const invIcon = r.invoice_url ? `<a href="${r.invoice_url}" target="_blank" class="icon-btn" title="Invoice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></a>` : '-';
+                
+                // STATUS LOGIC
+                let statusHtml = '';
+                if (isAdmin) {
+                    statusHtml = `<select onchange="updateReportStatus('${r.id}', this.value, this)" class="status-select ${r.status?.toLowerCase()}">
+                        ${STATUS_OPTIONS.map(opt => `<option value="${opt}" ${r.status === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                    </select>`;
+                } else {
+                    statusHtml = `<span class="status-pill ${r.status?.toLowerCase()}" style="position:static;">${r.status}</span>`;
+                }
+
+                // USE REPORT SPECIFIC NAME OR FALLBACK TO PREMISE NAME
+                const propertyDisplayName = r.name || p.name;
+
+                return `<tr>
+                    <td><span style="font-weight:600; color:#2d3748; font-size:11px;">${propertyDisplayName}</span></td>
+                    <td><b>${r.report_type || '-'}</b></td>
+                    <td><span style="font-family:monospace;">${r.job_number}</span></td>
+                    <td>${statusHtml}</td>
+                    <td>${pdfIcon}</td>
+                    <td>${infoIcon}</td>
+                    <td>${invIcon}</td>
+                </tr>`;
+            }).join('');
+
+            if (mapInstance && p.lat) mapInstance.flyTo({ center: [p.lng, p.lat], zoom: 16, pitch: 60 });
+        }
+
+        // GALLERY HELPERS
+        function updateGalleryImage() {
+            document.getElementById('detailImg').src = currentGalleryImages[currentGalleryIndex];
+            document.getElementById('imgCounter').innerText = `${currentGalleryIndex + 1} / ${currentGalleryImages.length}`;
+            const showNav = currentGalleryImages.length > 1;
+            document.getElementById('prevImgBtn').style.display = showNav ? 'flex' : 'none';
+            document.getElementById('nextImgBtn').style.display = showNav ? 'flex' : 'none';
+        }
+
+        document.getElementById('nextImgBtn').onclick = (e) => {
+            e.stopPropagation();
+            currentGalleryIndex = (currentGalleryIndex + 1) % currentGalleryImages.length;
+            updateGalleryImage();
+        };
+
+        document.getElementById('prevImgBtn').onclick = (e) => {
+            e.stopPropagation();
+            currentGalleryIndex = (currentGalleryIndex - 1 + currentGalleryImages.length) % currentGalleryImages.length;
+            updateGalleryImage();
+        };
+
+        document.getElementById('closeDetailBtn').onclick = () => {
+            document.getElementById('propertyDetailPanel').classList.remove('active');
+            mapInstance.flyTo({ zoom: 14, pitch: 0 });
+        };
+
+        document.getElementById('backToAdminBtn').onclick = () => {
+            currentUser = { role: 'admin', name: 'Bayleys Admin' };
+            fetchAdminData().then(() => {
+                switchScreen('clientListScreen');
+                loadAdminDashboard();
+            });
+        };
+    </script>
+</body>
+</html>
