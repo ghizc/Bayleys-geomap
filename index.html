@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bayleys Property Survey System</title>
+    
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZ2hpei1jIiwiYSI6ImNtbHpsczQwMTA4bGszZnEyOWk3ejdsdzQifQ.Uyr2i4jlcL04Rf8aaEzv-A';
+    </script>
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    
+    <div id="debugConsole"></div>
+
+    <div id="requestReportBtn">
+        <button class="btn-float" onclick="openRequestModal()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Request a Report
+        </button>
+    </div>
+
+    <div id="requestModalOverlay" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <h2>New Report Request</h2>
+                    <h4>We will email you with a quote before proceeding</h4>
+                </div>
+                <button class="modal-close" onclick="closeRequestModal()">✕</button>
+            </div>
+            <form id="requestReportForm">
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Property Manager Name</label>
+                            <input type="text" id="reqManagerName" class="form-input" required placeholder="Full Name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Manager Email</label>
+                            <input type="email" id="reqManagerEmail" class="form-input" required placeholder="manager@domain.com">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Premise Address</label>
+                        <input type="text" id="reqAddress" class="form-input" required placeholder="Full property address">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">Report Type</label>
+                            <select id="reqType" class="form-input" required style="cursor:pointer;">
+                                <option value="" disabled selected>Select required report type...</option>
+                                <option value="BCA">BCA (Building Condition Assessment)</option>
+                                <option value="COO">COO (Change of Operator/Owner)</option>
+                                <option value="FMP">FMP (Forward Maintenance Plan)</option>
+                                <option value="MGA">MGA (Make Good Assessment)</option>
+                                <option value="PCR">PCR (Property Condition Report)</option>
+                                <option value="RCA">RCA (Reinstatement Cost Assessment)</option>
+                                <option value="RMP">RMP (Roof Maintenance Plan)</option>
+                                <option value="TDD">TDD (Technical Due Diligence)</option>
+                                <option value="Capex">CapEx (Capital Expenditure)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Delivery Deadline</label>
+                            <input type="date" id="reqDeadline" class="form-input" required>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 24px;">
+                        <label class="form-label" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Attachments (Optional)</label>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <div class="file-upload-box">
+                                    <input type="file" id="reqLeaseFile" multiple accept=".pdf, .jpg, .jpeg, .png" onchange="updateFileName(this, 'leaseFileName')">
+                                    <div class="file-label-text">📄 Upload Leases</div>
+                                    <div id="leaseFileName" class="file-name-display"></div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div class="file-upload-box">
+                                    <input type="file" id="reqPlanFile" multiple accept=".pdf, .jpg, .jpeg, .png" onchange="updateFileName(this, 'planFileName')">
+                                    <div class="file-label-text">📐 Upload Plans</div>
+                                    <div id="planFileName" class="file-name-display"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: -5px; font-weight: 500;">You can select multiple files at once.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeRequestModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitRequestBtn" style="width: auto; padding: 12px 32px;">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="createReportModalOverlay" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <h2>Create New Report</h2>
+                    <h4>Add a job directly to the database</h4>
+                </div>
+                <button class="modal-close" onclick="closeCreateReportModal()">✕</button>
+            </div>
+            <form id="createReportForm">
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <div class="label-with-action">
+                                <label class="form-label" style="margin-bottom:0;">Client</label>
+                                <span class="label-action-link" onclick="openCreateClientModal()">+ New Client</span>
+                            </div>
+                            <select id="newRepClient" class="form-input" required style="cursor:pointer;"></select>
+                        </div>
+                        <div class="form-group">
+                            <div class="label-with-action">
+                                <label class="form-label" style="margin-bottom:0;">Premise</label>
+                                <span class="label-action-link" onclick="openCreatePremiseModal()">+ New Premise</span>
+                            </div>
+                            <select id="newRepPremise" class="form-input" required style="cursor:pointer;"></select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Job Number</label>
+                            <input type="text" id="newRepJobNo" class="form-input" required placeholder="e.g. 2682">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Report Type</label>
+                            <select id="newRepType" class="form-input" required style="cursor:pointer;">
+                                <option value="" disabled selected>Select type...</option>
+                                <option value="BCA">BCA</option>
+                                <option value="COO">COO</option>
+                                <option value="FMP">FMP</option>
+                                <option value="MGA">MGA</option>
+                                <option value="PCR">PCR</option>
+                                <option value="RCA">RCA</option>
+                                <option value="RMP">RMP</option>
+                                <option value="TDD">TDD</option>
+                                <option value="Capex">CapEx</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Status</label>
+                            <select id="newRepStatus" class="form-input" required style="cursor:pointer;">
+                                <option value="New" selected>New</option>
+                                <option value="Inspection">Inspection</option>
+                                <option value="Report">Report</option>
+                                <option value="Advice">Advice</option>
+                                <option value="Invoice">Invoice</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Complete">Complete</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label class="form-label">Report Name (Optional)</label>
+                            <input type="text" id="newRepName" class="form-input" placeholder="Defaults to Premise Name if left blank">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Condition</label>
+                            <select id="newRepCondition" class="form-input" style="cursor:pointer;">
+                                <option value="" selected>Select...</option>
+                                <option value="Excellent">Excellent</option>
+                                <option value="Satisfactory">Satisfactory</option>
+                                <option value="Poor">Poor</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Surveyor Name</label>
+                            <select id="newRepSurveyor" class="form-input" style="cursor:pointer;">
+                                <option value="" selected>Select...</option>
+                                <option value="David Guy">David Guy</option>
+                                <option value="Hamish McDonald">Hamish McDonald</option>
+                                <option value="Jason Mahey">Jason Mahey</option>
+                                <option value="Kieran Hindley">Kieran Hindley</option>
+                                <option value="Ben Lewis">Ben Lewis</option>
+                                <option value="Ken">Ken</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Inspection Date</label>
+                            <input type="date" id="newRepDate" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Delivery Date</label>
+                            <input type="date" id="newRepDeliveryDate" class="form-input">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">PDF URL</label>
+                            <input type="url" id="newRepPdf" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Info URL</label>
+                            <input type="url" id="newRepInfo" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Invoice URL</label>
+                            <input type="url" id="newRepInvoice" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Video URL</label>
+                            <input type="url" id="newRepVideo" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label class="form-label" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Cover Images</label>
+                        <div class="form-group">
+                            <div class="file-upload-box" id="newRepImageDropZone" style="min-height: 80px;">
+                                <input type="file" id="newRepImages" multiple accept=".jpg, .jpeg, .png, .webp" onchange="updateFileName(this, 'newRepImagesName')">
+                                <div class="file-label-text">🖼️ Drop Cover Images Here or Click to Browse</div>
+                                <div id="newRepImagesName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeCreateReportModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitCreateReportBtn" style="width: auto; padding: 12px 32px;">Create Report</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="editReportModalOverlay" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <h2>Edit Report</h2>
+                    <h4>Update details or append cover images</h4>
+                </div>
+                <button class="modal-close" onclick="closeEditReportModal()">✕</button>
+            </div>
+            <form id="editReportForm">
+                <div class="modal-body">
+                    
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Condition</label>
+                            <select id="editRepCondition" class="form-input" style="cursor:pointer;">
+                                <option value="" selected>Select...</option>
+                                <option value="Excellent">Excellent</option>
+                                <option value="Satisfactory">Satisfactory</option>
+                                <option value="Poor">Poor</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Surveyor Name</label>
+                            <select id="editRepSurveyor" class="form-input" style="cursor:pointer;">
+                                <option value="" selected>Select...</option>
+                                <option value="David Guy">David Guy</option>
+                                <option value="Hamish McDonald">Hamish McDonald</option>
+                                <option value="Jason Mahey">Jason Mahey</option>
+                                <option value="Kieran Hindley">Kieran Hindley</option>
+                                <option value="Ben Lewis">Ben Lewis</option>
+                                <option value="Ken">Ken</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Inspection Date</label>
+                            <input type="date" id="editRepDate" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Delivery Date</label>
+                            <input type="date" id="editRepDeliveryDate" class="form-input">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">PDF URL</label>
+                            <input type="url" id="editRepPdf" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Info URL</label>
+                            <input type="url" id="editRepInfo" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Invoice URL</label>
+                            <input type="url" id="editRepInvoice" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Video URL</label>
+                            <input type="url" id="editRepVideo" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label class="form-label" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Append Cover Images</label>
+                        <div class="form-group">
+                            <div class="file-upload-box" id="editRepImageDropZone" style="min-height: 80px;">
+                                <input type="file" id="editRepImages" multiple accept=".jpg, .jpeg, .png, .webp" onchange="updateFileName(this, 'editRepImagesName')">
+                                <div class="file-label-text">🖼️ Drop New Images Here or Click to Browse</div>
+                                <div id="editRepImagesName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeEditReportModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitEditReportBtn" style="width: auto; padding: 12px 32px;">Save Updates</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="createClientModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card" style="width: 450px;">
+            <div class="modal-header">
+                <div>
+                    <h2>Create Client</h2>
+                </div>
+                <button class="modal-close" onclick="closeCreateClientModal()">✕</button>
+            </div>
+            <form id="createClientForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Client Name</label>
+                        <input type="text" id="newClientName" class="form-input" required placeholder="e.g. Foodstuffs">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Access Code (Optional)</label>
+                        <input type="text" id="newClientCode" class="form-input" placeholder="e.g. FDS123">
+                    </div>
+                    
+                    <div style="margin-top: 16px;">
+                        <label class="form-label" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Client Logo (Optional)</label>
+                        <div class="form-group">
+                            <div class="file-upload-box" id="newClientLogoDropZone" style="min-height: 80px;">
+                                <input type="file" id="newClientLogo" accept=".jpg, .jpeg, .png, .webp" onchange="updateFileName(this, 'newClientLogoName')">
+                                <div class="file-label-text">🖼️ Drop Logo Here or Click to Browse</div>
+                                <div id="newClientLogoName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeCreateClientModal()">Back</button>
+                    <button type="submit" class="btn-access" id="submitCreateClientBtn" style="width: auto; padding: 12px 32px;">Save Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="createPremiseModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <h2>Create Premise</h2>
+                    <h4>Address will be auto-geocoded on save</h4>
+                </div>
+                <button class="modal-close" onclick="closeCreatePremiseModal()">✕</button>
+            </div>
+            <form id="createPremiseForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Premise Name</label>
+                        <input type="text" id="newPremiseName" class="form-input" required placeholder="e.g. Four Square Hokitika">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Full Address</label>
+                        <input type="text" id="newPremiseAddress" class="form-input" required placeholder="123 Example St, City">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Sector</label>
+                        <select id="newPremiseSector" class="form-input">
+                            <option value="" disabled selected>Select...</option>
+                            <option value="Commercial - Office">Commercial - Office</option>
+                            <option value="Commercial - Retail">Commercial - Retail</option>
+                            <option value="Industrial - Light">Industrial - Light</option>
+                            <option value="Industrial - Heavy">Industrial - Heavy</option>
+                            <option value="Industrial - Service">Industrial - Service</option>
+                            <option value="Rural - Agriculture">Rural - Agriculture</option>
+                            <option value="Rural - Lifestyle">Rural - Lifestyle</option>
+                            <option value="Special Purpose">Special Purpose</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Floor Area</label>
+                            <input type="text" id="newPremiseFloor" class="form-input" placeholder="e.g. 5,000 sqm">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Site Area</label>
+                            <input type="text" id="newPremiseSite" class="form-input" placeholder="e.g. 1.2 ha">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Year Built</label>
+                            <input type="number" id="newPremiseYear" class="form-input" placeholder="YYYY">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeCreatePremiseModal()">Back</button>
+                    <button type="submit" class="btn-access" id="submitCreatePremiseBtn" style="width: auto; padding: 12px 32px;">Save Premise</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="loginScreen" class="screen active">
+        <div id="loginMapBackground"></div>
+        <div class="login-card">
+            <div class="login-header"><h1>BAYLEYS</h1><p>Property Survey System</p></div>
+            <form id="loginForm">
+                <div class="form-group"><label class="form-label">User ID</label><input type="text" class="form-input" id="userId" placeholder="Centuria" required></div>
+                <div class="form-group"><label class="form-label">Password</label><input type="password" class="form-input" id="userPassword" placeholder="cent123" required></div>
+                <button type="submit" class="btn-access" id="loginBtn">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="clientListScreen" class="screen">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1 style="margin-top: 15px;">BAYLEYS</h1>
+                <p>Admin Console</p>
+            </div>
+            <div class="user-profile">
+                <div style="display:flex; gap:10px; align-items:center;"><div class="avatar">BA</div><div><div style="font-size:13px; font-weight:600; color:#0f172a;">Bayleys Admin</div><div style="font-size:10px; color:#64748b; font-weight:500;">ADMINISTRATOR</div></div></div>
+                <div class="logout-link" onclick="window.location.reload()">LOGOUT</div>
+            </div>
+            <div class="sidebar-search-container">
+                <div class="search-row">
+                    <div class="search-input-wrapper" style="flex:1;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" id="adminSearchInput" placeholder="Search database...">
+                        <button class="clear-btn" id="adminClearSearch" style="display:none;">✕</button>
+                    </div>
+                    <button id="filterToggleBtn" class="modern-filter-btn" title="Filter Options">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    </button>
+                    <div id="filterDropdown" class="modern-filter-dropdown"></div>
+                </div>
+            </div>
+            <div class="filter-bar">
+                <div style="display: flex; gap: 10px;">
+                    <div class="filter-btn active" id="tabClientsBtn" onclick="switchAdminTab('clients')">Clients</div>
+                    <div class="filter-btn" id="tabReportsBtn" onclick="switchAdminTab('reports')">Reports</div>
+                </div>
+                <button class="filter-btn btn-new-report" onclick="openCreateReportModal()">+ New Report</button>
+            </div>
+            <div class="sidebar-scroll" id="clientList">Loading...</div>
+        </div>
+        <div class="main-content">
+            <div id="adminMap"></div>
+            
+            <div class="admin-dashboard-widgets" id="adminDashboardWidgets" style="display:none;">
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-value" id="statActive">-</div><div class="stat-label">Active Jobs</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statInspect">-</div><div class="stat-label">To Inspect</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statInvoice">-</div><div class="stat-label">To Invoice</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statPremises">-</div><div class="stat-label">Total Premises</div></div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-box">
+                        <canvas id="growthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="premisesScreen" class="screen">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo-container"><img id="brandLogo" src="" alt="Client Logo"></div>
+                <p>PORTFOLIO ACCESS</p>
+            </div>
+            <div class="user-profile">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <div class="avatar" id="userAvatar">U</div>
+                    <div><div style="font-size:13px; font-weight:600; color:#0f172a;" id="userNameDisplay">Client Name</div><div style="font-size:10px; color:#64748b; font-weight:500;">CLIENT VIEW</div></div>
+                </div>
+                <div class="logout-link" onclick="window.location.reload()">LOGOUT</div>
+            </div>
+            <div class="sidebar-search-container">
+                <div class="search-input-wrapper">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="clientSearchInput" placeholder="Search premises...">
+                    <button class="clear-btn" id="clientClearSearch" style="display:none;">✕</button>
+                </div>
+            </div>
+            <div class="back-btn" id="backToAdminBtn" style="display:none;">← BACK TO ADMIN</div>
+            <div class="sidebar-scroll" id="premisesList">Loading...</div>
+        </div>
+        <div class="main-content">
+            <div id="premisesMap"></div>
+            
+            <div id="propertyDetailPanel" class="detail-panel">
+                <div class="detail-image">
+                    <img id="detailImg" src="">
+                    <div class="gallery-nav gallery-prev" id="prevImgBtn">‹</div>
+                    <div class="gallery-nav gallery-next" id="nextImgBtn">›</div>
+                    <div class="gallery-counter" id="imgCounter">1 / 1</div>
+                    <div class="video-overlay" id="videoBtn"><div class="play-button"><svg width="24" height="24" viewBox="0 0 24 24" fill="#00264b"><path d="M8 5v14l11-7z"/></svg></div></div>
+                    <div class="close-detail" id="closeDetailBtn">✕</div>
+                </div>
+                <div class="detail-content">
+                    <h2 class="detail-title" id="detailTitle">Property Name</h2>
+                    <div style="font-size:14px; color:#64748b; margin-bottom:20px; font-weight:400;" id="detailAddress">Address</div>
+                    <div class="detail-grid">
+                        <div><div class="data-label">Floor Area</div><div class="data-value" id="detailFloor">-</div></div>
+                        <div><div class="data-label">Site Area</div><div class="data-value" id="detailSite">-</div></div>
+                        <div><div class="data-label">Sector</div><div class="data-value" id="detailSector">-</div></div>
+                        <div><div class="data-label">Age</div><div class="data-value" id="detailAge">-</div></div>
+                        <div><div class="data-label">Condition</div><div class="data-value" id="detailCond">-</div></div>
+                        <div><div class="data-label">Surveyed By</div><div class="data-value" id="detailSurveyor">-</div></div>
+                        <div><div class="data-label">Last Inspected</div><div class="data-value" id="detailInspected">-</div></div>
+                        <div><div class="data-label">Delivered</div><div class="data-value" id="detailDelivery">-</div></div>
+                    </div>
+                    <div style="font-size:12px; font-weight:600; color:#475569; margin-top:30px; border-bottom:2px solid #f1f5f9; padding-bottom:12px; letter-spacing:1px;">REPORTS & DOCUMENTS</div>
+                    <table class="reports-table">
+                        <thead id="reportsTableHeader"></thead>
+                        <tbody id="reportsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
