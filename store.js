@@ -8,6 +8,7 @@ export const state = {
     allReportsData: [],
     contactsData: [],
     reportRequestsData: [],
+    pricingData: [],
     
     // UI State
     currentMapStyle: null,
