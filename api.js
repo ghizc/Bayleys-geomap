@@ -135,3 +135,12 @@ export async function uploadMultipleFiles(fileInput, bucketName, folderName = ''
     }
     return uploadedUrls;
 }
+
+/**
+ * Fetches the global pricing matrix
+ */
+export async function getPricingMatrix() {
+    const { data, error } = await supabase.from('pricing_matrix').select('*');
+    if (error) throw error;
+    return data || [];
+}
