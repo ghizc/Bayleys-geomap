@@ -290,6 +290,11 @@ window.onload = async () => {
         // Centers perfectly over New Zealand at a wide zoom
         initMap('loginMapBackground', [174.0, -41.0], 5.5, 0, 0);
         
+        // --- NEW: Load the Pricing Matrix ---
+        import('./api.js').then(async (apiMod) => {
+            state.pricingData = await apiMod.getPricingMatrix();
+        });
+        
         // Simple ping to wake up DB
         await supabase.from('clients').select('id', { count: 'exact', head: true });
         log(`System Ready.`);
@@ -426,5 +431,79 @@ window.updateQuoteStatus = async (id, newStatus) => {
         await window.refreshAppAdminData(); // Refresh the list instantly
     } catch (err) {
         alert("Failed to update status: " + err.message);
+    }
+};
+
+window.generateWFMQuote = async (requestId, event) => {
+    const r = state.reportRequestsData.find(req => String(req.id) === String(requestId));
+    if (!r) return;
+
+    // 1. Attempt to extract the Target Area to guess the budget
+    let sqm = 0;
+    const areaMatch = r.notes?.match(/Target Area:\s*([\d,.]+)/i);
+    if (areaMatch) sqm = parseFloat(areaMatch[1].replace(/,/g, ''));
+
+    // 2. Look up the Base Cost from your Pricing Matrix
+    let suggestedBudget = 0;
+    if (sqm > 0 && state.pricingData && state.pricingData.length > 0) {
+        let matchingPricing = state.pricingData.filter(p => p.report_type === r.report_type);
+        matchingPricing.sort((a, b) => a.max_sqm - b.max_sqm);
+        const tierData = matchingPricing.find(p => sqm <= p.max_sqm);
+        
+        if (tierData) {
+            // Defaulting to the office/retail average for the prompt
+            suggestedBudget = tierData.office_fee || tierData.retail_fee || 0; 
+            suggestedBudget += 150; // Add the flat travel buffer
+        }
+    }
+
+    // 3. Prompt the Admin to confirm the Budget amount before sending
+    const budgetInput = prompt(
+        `Confirm the estimated budget for the ${r.report_type} at ${r.premise_name || r.address}:\n(You can adjust this later in WFM)`, 
+        suggestedBudget || 3500
+    );
+    
+    if (budgetInput === null) return; // User clicked Cancel
+
+    const finalBudget = parseFloat(budgetInput.replace(/[^\d.]/g, '')) || 0;
+
+    // 4. UI Loading State
+    const btn = event.currentTarget;
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spin">🔄</span> Creating Quote...';
+    btn.disabled = true;
+
+    try {
+        // 5. Send to Supabase Edge Function to securely hit the WFM API
+        const { data, error } = await supabase.functions.invoke('wfm-create-quote', {
+            body: { 
+                request: r,
+                budget: finalBudget
+            }
+        });
+
+        if (error) throw error;
+        if (data && data.error) throw new Error(data.error);
+
+        btn.innerHTML = '✓ Quote Created!';
+        btn.style.background = '#10b981';
+        btn.style.borderColor = '#10b981';
+
+        // 6. Open the newly created quote in a new tab!
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+            btn.style.background = '#00264b';
+            btn.style.borderColor = '#00264b';
+            btn.disabled = false;
+            
+            // If the API returns the specific quote URL, open it, otherwise open the draft list
+            const url = data.quoteUrl || 'https://practicemanager.xero.com/Quote/Draft.aspx';
+            window.open(url, '_blank');
+        }, 1500);
+
+    } catch (err) {
+        alert("Failed to create quote in WFM:\n" + err.message);
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
     }
 };
