@@ -402,14 +402,16 @@ export function filterAdminView() {
 
             return `
             <div class="card-item" style="cursor: default;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2px;">
                     <div style="font-weight: 700; font-size: 15px; color: #0f172a;">${r.client_name}</div>
                     <div class="status-pill ${badgeClass}" style="position: static; font-size: 9px; padding: 4px 10px;">${statusStr}</div>
                 </div>
+                <div style="font-size: 11px; color: #64748b; font-weight: 500; margin-bottom: 10px;">Requested by: <span style="color: #0f172a; font-weight: 600;">${r.property_manager || 'Unknown'}</span></div>
+                
                 <div style="font-size: 13px; color: #0f172a; font-weight: 600; margin-bottom: 4px;">🏢 ${r.premise_name || 'New Location'}</div>
                 <div style="font-size: 12px; color: #64748b; font-weight: 500; margin-bottom: 6px;">📍 ${r.address}</div>
                 <div style="font-size: 12px; color: #0284c7; font-weight: 600; margin-bottom: 12px;">📋 ${r.report_type} &nbsp;•&nbsp; <span style="color: #64748b; font-weight: 500;">Due: ${r.delivery_deadline}</span></div>
-                
+
                 ${r.notes ? `<div style="background: #f8fafc; padding: 12px; border-radius: 8px; font-size: 11px; color: #475569; margin-bottom: 12px; border: 1px solid #e2e8f0; line-height: 1.4;"><strong>Notes:</strong> ${r.notes}</div>` : ''}
 
                 <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 12px;">
@@ -423,8 +425,8 @@ export function filterAdminView() {
                         ` : ''}
                         
                         ${safeClass === 'approved' ? `
-                            <a href="https://practicemanager.xero.com/Quote/Draft.aspx" target="_blank" style="padding: 6px 14px; font-size: 11px; border: 1px solid #00264b; background: #00264b; color: white; border-radius: 6px; cursor: pointer; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#001d3a'" onmouseout="this.style.background='#00264b'">
-                                Create Quote in WFM <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            <a href="https://practicemanager.xero.com/Lead/List.aspx" target="_blank" style="padding: 6px 14px; font-size: 11px; border: 1px solid #e2e8f0; background: white; color: #00264b; border-radius: 6px; cursor: pointer; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                                View Lead in WFM <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                             </a>
                         ` : ''}
                     </div>
