@@ -12,15 +12,13 @@ window.addPremiseRow = () => {
     const rowCount = container.children.length;
     const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2); 
 
-    // Generate Saved Locations Dropdown from the client's existing REPORTS
+    // Generate Saved Locations Dropdown
     let savedPremisesOptions = '';
     const clientId = state.currentUser?.clientSpoof?.id || state.currentUser?.id;
     
     if (state.allReportsData && state.allReportsData.length > 0) {
-        // 1. Get reports for this specific client
         const clientReports = state.allReportsData.filter(r => r.client_id === clientId && r.name);
         
-        // 2. Remove duplicates (in case they have multiple reports for the exact same location name)
         const uniqueReports = [];
         const seenNames = new Set();
         for (const r of clientReports) {
@@ -30,14 +28,14 @@ window.addPremiseRow = () => {
             }
         }
 
-        // 3. Sort alphabetically by Report Name
         const sorted = uniqueReports.sort((a,b) => a.name.localeCompare(b.name));
         
-        // 4. Build the options, linking the Report Name to its Parent Premise Address
         savedPremisesOptions = sorted.map(r => {
             const premise = state.premisesData.find(p => p.id === r.premise_id) || {};
             const address = premise.address || '';
-            return `<option value="${r.id}" data-name="${r.name}" data-address="${address}">${r.name}</option>`;
+            const floor = premise.floor_area || '';
+            const sector = premise.sector || '';
+            return `<option value="${r.id}" data-name="${r.name}" data-address="${address}" data-floor="${floor}" data-sector="${sector}">${r.name}</option>`;
         }).join('');
     }
 
@@ -73,11 +71,11 @@ window.addPremiseRow = () => {
             </div>
             <div class="form-group" style="flex: 1; margin-bottom: 0;">
                 <label class="form-label" style="font-size: 10px;">Region</label>
-                <input type="text" class="form-input req-region-input" required placeholder="e.g. Auckland">
+                <input type="text" class="form-input req-region-input" required placeholder="e.g. Auckland" oninput="window.calculateRowEstimate(this.closest('.premise-req-row'))">
             </div>
             <div class="form-group" style="flex: 1; margin-bottom: 0;">
                 <label class="form-label" style="font-size: 10px;">Country</label>
-                <select class="form-input req-country-select" required style="cursor:pointer;">
+                <select class="form-input req-country-select" required style="cursor:pointer;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
                     <option value="New Zealand" selected>New Zealand</option>
                     <option value="Australia">Australia</option>
                 </select>
@@ -87,7 +85,7 @@ window.addPremiseRow = () => {
         <div class="form-row" style="margin-bottom: 12px;">
             <div class="form-group" style="flex: 1.5; margin-bottom: 0;">
                 <label class="form-label" style="font-size: 10px;">Report Type</label>
-                <select class="form-input req-type-select" required style="cursor:pointer;">
+                <select class="form-input req-type-select" required style="cursor:pointer;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
                     <option value="" disabled selected>Select...</option>
                     <option value="BCA">BCA (Building Condition Assessment)</option>
                     <option value="COO">COO (Change of Operator/Owner)</option>
@@ -101,12 +99,26 @@ window.addPremiseRow = () => {
                 </select>
             </div>
             <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label class="form-label" style="font-size: 10px; color: #0284c7;">Target Area (sqm)</label>
+                <input type="number" class="form-input req-area-input" required placeholder="e.g. 500" oninput="window.calculateRowEstimate(this.closest('.premise-req-row'))" style="border-color: #bae6fd;">
+            </div>
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
                 <label class="form-label" style="font-size: 10px;">Delivery Deadline</label>
                 <input type="date" class="form-input req-deadline-input" required>
             </div>
             <div class="form-group" style="flex: 1; margin-bottom: 0;">
-                <label class="form-label" style="font-size: 10px;">Client Order # (Optional)</label>
+                <label class="form-label" style="font-size: 10px;">Order # (Opt)</label>
                 <input type="text" class="form-input req-co-input" placeholder="e.g. PO-9921">
+            </div>
+        </div>
+
+        <div class="estimate-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 11px; color: #64748b; font-weight: 500;">
+                <span class="est-breakdown">Enter area & location for estimate</span>
+                <input type="hidden" class="req-hidden-sector">
+            </div>
+            <div style="font-size: 14px; font-weight: 700; color: #0f172a;">
+                Est. Total: <span class="est-total" style="color: #f59e0b;">TBC</span>
             </div>
         </div>
 
@@ -133,15 +145,19 @@ window.addPremiseRow = () => {
     container.appendChild(row);
 };
 
-// Magic helper function to autofill the row when a dropdown item is selected
 window.autofillReqPremise = (selectEl) => {
     const selectedOpt = selectEl.options[selectEl.selectedIndex];
     if (!selectedOpt.value) return;
 
     const row = selectEl.closest('.premise-req-row');
     row.querySelector('.req-name-input').value = selectedOpt.dataset.name || '';
+    row.querySelector('.req-hidden-sector').value = selectedOpt.dataset.sector || '';
 
-    // We split the saved address by comma to automatically fill the Region and Country correctly
+    // Auto-extract the floor area number to pre-fill the Target Area box
+    let sqm = parseFloat((selectedOpt.dataset.floor || '').replace(/[^\d.]/g, ''));
+    if ((selectedOpt.dataset.floor || '').toLowerCase().includes('ha')) sqm = sqm * 10000;
+    if (!isNaN(sqm)) row.querySelector('.req-area-input').value = sqm;
+
     const fullAddr = selectedOpt.dataset.address || '';
     const parts = fullAddr.split(',').map(s => s.trim());
 
@@ -158,6 +174,49 @@ window.autofillReqPremise = (selectEl) => {
         row.querySelector('.req-address-input').value = fullAddr;
         row.querySelector('.req-region-input').value = '';
     }
+
+    window.calculateRowEstimate(row);
+};
+
+// Live Quote Calculator (Base Report Cost Only)
+window.calculateRowEstimate = (row) => {
+    const type = row.querySelector('.req-type-select').value;
+    const sqmStr = row.querySelector('.req-area-input').value;
+    const sectorStr = row.querySelector('.req-hidden-sector').value;
+
+    const breakdownEl = row.querySelector('.est-breakdown');
+    const totalEl = row.querySelector('.est-total');
+
+    const sqm = parseFloat(sqmStr);
+
+    if (!type || isNaN(sqm)) {
+        breakdownEl.innerText = "Enter target area & report type to estimate";
+        totalEl.innerText = "TBC";
+        totalEl.style.color = "#f59e0b";
+        return;
+    }
+
+    let matchingPricing = state.pricingData.filter(p => p.report_type === type);
+    matchingPricing.sort((a, b) => a.max_sqm - b.max_sqm);
+    const tierData = matchingPricing.find(p => sqm <= p.max_sqm);
+
+    if (!tierData) {
+        breakdownEl.innerText = `Area > 5000 sqm (${sqm.toLocaleString()} sqm)`;
+        totalEl.innerText = "Custom Quote Required";
+        totalEl.style.color = "#f59e0b";
+        return;
+    }
+
+    let feeColumn = 'retail_fee'; 
+    const s = sectorStr.toLowerCase();
+    if (s.includes('office')) feeColumn = 'office_fee';
+    else if (s.includes('industrial')) feeColumn = 'industrial_fee';
+
+    const baseCost = tierData[feeColumn];
+
+    breakdownEl.innerText = `Report Base Cost (${tierData.timeline_hours} hrs)`;
+    totalEl.innerText = `$${baseCost.toLocaleString()}`;
+    totalEl.style.color = "#10b981"; 
 };
 
 window.openRequestModal = async () => {
@@ -177,7 +236,7 @@ window.openRequestModal = async () => {
         
         if (data && data.length > 0) {
             contactSelect.innerHTML = '<option value="" disabled selected>Select Property Manager...</option>' + 
-                data.map(c => `<option value="${c.id}" data-name="${c.first_name} ${c.last_name}" data-email="${c.email}">${c.first_name} ${c.last_name} (${c.email})</option>`).join('');
+                data.map(c => `<option value="${c.id}" data-name="${c.first_name} ${c.last_name}" data-email="${c.email}" data-wfmid="${c.wfm_id || ''}">${c.first_name} ${c.last_name} (${c.email})</option>`).join('');
         } else {
             contactSelect.innerHTML = '<option value="" disabled selected>No contacts found. Please add one.</option>';
         }
@@ -202,7 +261,7 @@ window.updateFileName = (input, displayId) => {
     else displayEl.innerText = `${input.files.length} files selected`;
 };
 
-// Handle the bulk submission
+// Handle the bulk submission & WFM Sync
 document.getElementById('requestReportForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('submitRequestBtn');
@@ -217,16 +276,23 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
         const selectedOption = contactSelect.options[contactSelect.selectedIndex];
         const managerName = selectedOption.dataset.name;
         const managerEmail = selectedOption.dataset.email;
+        const managerWfmId = selectedOption.dataset.wfmid || null;
 
         const clientName = state.currentUser.clientSpoof?.name || state.currentUser.name;
+        const clientWfmId = state.currentUser.clientSpoof?.wfm_id || state.currentUser.wfm_id; 
         const notes = document.getElementById('reqNotes').value.trim();
 
         const rows = document.querySelectorAll('.premise-req-row');
         const inserts = [];
+        const wfmPayloads = []; 
         let currentRow = 1;
 
         for (const row of rows) {
             btn.innerText = `Processing Premise ${currentRow} of ${rows.length}...`;
+            
+            const premiseName = row.querySelector('.req-name-input').value.trim(); 
+            const targetArea = row.querySelector('.req-area-input').value.trim(); 
+            const sectorStr = row.querySelector('.req-hidden-sector').value;
             
             const addressLine = row.querySelector('.req-address-input').value.trim();
             const region = row.querySelector('.req-region-input').value.trim();
@@ -240,6 +306,25 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
 
             const fullAddress = `${addressLine}, ${region}, ${country}`;
 
+            // Calculate exact Base Cost for Database
+            let sqm = parseFloat(targetArea.replace(/[^\d.]/g, ''));
+            if (targetArea.toLowerCase().includes('ha')) sqm = sqm * 10000;
+            
+            let baseCost = 0;
+            if (!isNaN(sqm) && state.pricingData && state.pricingData.length > 0) {
+                let matchingPricing = state.pricingData.filter(p => p.report_type === reportType);
+                matchingPricing.sort((a, b) => a.max_sqm - b.max_sqm);
+                const tierData = matchingPricing.find(p => sqm <= p.max_sqm);
+                
+                if (tierData) {
+                    let feeColumn = 'retail_fee'; 
+                    const s = sectorStr.toLowerCase();
+                    if (s.includes('office')) feeColumn = 'office_fee';
+                    else if (s.includes('industrial')) feeColumn = 'industrial_fee';
+                    baseCost = tierData[feeColumn] || 0;
+                }
+            }
+
             if (addressLine && reportType && deadline) {
                 const leaseUrls = await uploadMultipleFiles(leaseInput, 'report_requests', 'leases');
                 const planUrls = await uploadMultipleFiles(planInput, 'report_requests', 'plans');
@@ -248,16 +333,34 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
                     client_name: clientName,
                     property_manager: managerName,
                     property_manager_email: managerEmail,
-                    premise_name: reportName,
+                    premise_name: premiseName, 
                     address: fullAddress,
                     report_type: reportType,
                     delivery_deadline: deadline,
                     co_number: coNumber || null,
                     notes: notes || null,
+                    target_area: isNaN(sqm) ? null : sqm, 
+                    estimated_cost: baseCost > 0 ? baseCost : null, 
                     status: 'Pending',
                     request_date: new Date().toISOString(),
                     lease_url: leaseUrls || null,
                     plan_url: planUrls || null
+                });
+
+                wfmPayloads.push({
+                    request: {
+                        client_name: clientName,
+                        premise_name: premiseName,
+                        address: fullAddress,
+                        report_type: reportType,
+                        delivery_deadline: deadline,
+                        notes: `Target Area: ${sqm} sqm\nNotes:\n${notes || 'None'}`,
+                        lease_url: leaseUrls || null, // <-- Passes the actual File URLs!
+                        plan_url: planUrls || null    // <-- Passes the actual File URLs!
+                    },
+                    budget: baseCost,
+                    clientWfmId: clientWfmId,
+                    contactWfmId: managerWfmId // <-- Passes the Contact UUID!
                 });
             }
             currentRow++;
@@ -265,22 +368,34 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
 
         if (inserts.length === 0) throw new Error("Please provide details for at least one premise.");
 
-        // 1. Save all rows to the database instantly
+        // Save all rows to the database instantly
         btn.innerText = 'Saving to Database...';
         const { error: insertError } = await supabase.from('report_requests').insert(inserts);
         if (insertError) throw insertError;
 
-        // 2. Directly trigger the email Edge Function, passing all the data
-        btn.innerText = 'Notifying David...';
-        const { data: emailData, error: emailError } = await supabase.functions.invoke('send-request-email', {
+        // Notify via Email
+        btn.innerText = 'Notifying Team...';
+        const { error: emailError } = await supabase.functions.invoke('send-request-email', {
             body: { requests: inserts }
         });
-
-        // Even if the email silently fails on Resend's end, the data is safe in the DB.
         if (emailError) console.error("Email warning:", emailError);
 
+        // Silently push all requests straight into WorkflowMax
+        btn.innerText = 'Generating WFM Quotes...';
+        let wfmSuccessCount = 0;
+        for (const payload of wfmPayloads) {
+            try {
+                const { error: wfmError } = await supabase.functions.invoke('wfm-create-quote', {
+                    body: payload
+                });
+                if (!wfmError) wfmSuccessCount++;
+            } catch (e) {
+                console.error("WFM Background Sync Error:", e);
+            }
+        }
+
         log("Report request sent successfully!");
-        alert(`Success! All ${inserts.length} requests have been logged, and David has been emailed.`);
+        alert(`Success! Logged ${inserts.length} request(s).\n\n${wfmSuccessCount} Draft Quotes were automatically generated in WorkflowMax!`);
         window.closeRequestModal();
 
     } catch (err) {
