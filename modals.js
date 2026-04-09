@@ -278,6 +278,18 @@ window.autofillReqPremise = (selectEl) => {
     window.calculateRowEstimate(row);
 };
 
+// HELPER: Convert decimal hours (e.g. 1.8) into human-readable time (e.g. 1h 48min)
+window.formatTimeReadable = (decimalHours) => {
+    const totalMinutes = Math.round(decimalHours * 60);
+    const hrs = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    
+    if (hrs > 0 && mins > 0) return `${hrs}h ${mins}min`;
+    if (hrs > 0) return `${hrs}h`;
+    if (mins > 0) return `${mins}min`;
+    return `0h`;
+};
+
 // Master Granular, DB-Driven Hybrid Routing Engine
 window.calculateRowEstimate = async (row) => {
     // 1. SECURE DB LOOKUPS
@@ -391,7 +403,6 @@ window.calculateRowEstimate = async (row) => {
 
                             const flightHrs = flightMins / 60;
                             
-                            // Math using strictly database-driven variables
                             const oneWayFlightTripHrs = Number(homeOffice.apt_drive_hrs) + flightHrs + RENTAL_ADMIN_HRS + localDriveHrs;
                             
                             if (oneWayFlightTripHrs < oneWayDriveHrs) {
@@ -410,9 +421,11 @@ window.calculateRowEstimate = async (row) => {
                         travelText = `Drive from ${homeOffice.name}`;
                     }
                     
-                    // Enforce DB-driven limits and round to nearest half hour
+                    // Enforce DB-driven limits
                     travelHrs = Math.max(MIN_TRAVEL_HRS, Math.min(MAX_TRAVEL_HRS, travelHrs)); 
-                    travelHrs = Math.ceil(travelHrs * 2) / 2; 
+                    
+                    // THE FIX: Stop rounding "up". Just strictly map to 1 decimal place.
+                    travelHrs = Math.round(travelHrs * 10) / 10; 
                 }
             }
         } catch(e) { 
@@ -437,7 +450,10 @@ window.calculateRowEstimate = async (row) => {
     const occHrs = getVal(row.querySelector('.req-occ-select').value);
     const docHrs = getVal(row.querySelector('.req-docs-select').value);
     
-    const inspectionHrs = INSP_BASE_HRS + areaHrs + typeHrs + renoHrs + occHrs + docHrs;
+    let inspectionHrs = INSP_BASE_HRS + areaHrs + typeHrs + renoHrs + occHrs + docHrs;
+    
+    // THE FIX: Cleanly round internal inspection math to 1 decimal
+    inspectionHrs = Math.round(inspectionHrs * 10) / 10; 
 
     // 6. REPORT MODIFIERS 
     const reportTypeKey = typeSelect.value ? `rep_${typeSelect.value}` : null;
@@ -447,12 +463,16 @@ window.calculateRowEstimate = async (row) => {
     const finalReviewHrs = REPORT_REVIEW_HRS + regHrs;
     let reportHrs = REPORT_DRAFT_HRS + finalReviewHrs + reportTypeHrs + speedHrs;
     
-    // Enforce DB-driven Report Floor
     reportHrs = Math.max(MIN_REPORT_HRS, reportHrs); 
+    
+    // THE FIX: Cleanly round internal report math to 1 decimal
+    reportHrs = Math.round(reportHrs * 10) / 10; 
 
     // 7. TOTAL CALCULATION
     const totalHrs = travelHrs + inspectionHrs + reportHrs;
-    const totalFee = totalHrs * HOURLY_RATE;
+    
+    // THE FIX: Force the final dollar amount to be a clean, whole integer. No decimals allowed.
+    const totalFee = Math.round(totalHrs * HOURLY_RATE);
 
     breakdownEl.innerHTML = `Travel: ${travelHrs.toFixed(1)}h &nbsp;|&nbsp; Insp: ${inspectionHrs.toFixed(1)}h &nbsp;|&nbsp; Report: ${reportHrs.toFixed(1)}h`;
     totalEl.innerText = `$${totalFee.toLocaleString()}`;
