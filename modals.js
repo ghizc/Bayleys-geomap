@@ -590,20 +590,22 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
             const siteDocs = row.querySelector('.req-docs-select').selectedOptions[0].text;
             const regContext = row.querySelector('.req-reg-select').selectedOptions[0].text;
             
-            const trvH = row.dataset.breakdownTrav || '0.5';
-            const inspH = row.dataset.breakdownInsp || '2.0';
-            const repH = row.dataset.breakdownRep || '6.5';
-            const totalH = (parseFloat(trvH) + parseFloat(inspH) + parseFloat(repH)).toFixed(1);
+            // Re-parse the saved dataset math
+            const trvH = parseFloat(row.dataset.breakdownTrav || '0.5');
+            const inspH = parseFloat(row.dataset.breakdownInsp || '2.0');
+            const repH = parseFloat(row.dataset.breakdownRep || '10.0');
+            const totalH = trvH + inspH + repH;
 
             const numFloors = parseInt(row.querySelector('.req-levels-select').options[row.querySelector('.req-levels-select').selectedIndex].getAttribute('data-floors')) || 1;
             const samplingNote = numFloors > 3 ? `(Sampled exactly 3 floors of ${numFloors})` : "(Standard Footprint)";
 
+            // Build the string using the formatTimeReadable helper!
             const complexityBreakdown = `
 --- HOURS & COMPLEXITY PROFILE ---
-Calculated Time: ${totalH} Total Hours
-• Travel: ${trvH} hrs (Exact Drive + Time)
-• Inspection: ${inspH} hrs (Minimum 2h + Complexity)
-• Reporting: ${repH} hrs (Drafting, Peer Review & Uploads)
+Calculated Time: ${window.formatTimeReadable(totalH)} Total
+• Travel: ${window.formatTimeReadable(trvH)} (Exact Route Math)
+• Inspection: ${window.formatTimeReadable(inspH)} (Baseline + Complexity)
+• Reporting: ${window.formatTimeReadable(repH)} (Drafting, Peer Review & Uploads)
 
 Areas: Site ${siteArea.toLocaleString()} sqm | Floor ${floorArea.toLocaleString()} sqm
 Calc Base: ${calcArea.toFixed(0).toLocaleString()} sqm ${samplingNote}
