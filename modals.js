@@ -377,6 +377,7 @@ window.calculateRowEstimate = async (row) => {
                 const dirJson = await dirRes.json();
                 
                 if (dirJson.routes && dirJson.routes.length > 0) {
+                    // Pure Mapbox driving time (No artificial traffic buffer)
                     const oneWayDriveHrs = dirJson.routes[0].duration / 3600;
                     
                     if (oneWayDriveHrs > 3.0 && state.airportsData && state.airportsData.length > 0) {
@@ -387,12 +388,15 @@ window.calculateRowEstimate = async (row) => {
                         if (flightMins && flightMins > 0) {
                             const localDriveRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${destAirport.lng},${destAirport.lat};${destLng},${destLat}?access_token=${MAPBOX_TOKEN}`);
                             const localDriveJson = await localDriveRes.json();
+                            
+                            // Pure Mapbox time for the regional destination drive
                             const localDriveHrs = (localDriveJson.routes && localDriveJson.routes.length > 0) 
-                                ? (localDriveJson.routes[0].duration / 3600) : 0.5;
+                                ? (localDriveJson.routes[0].duration / 3600) : 0.25;
 
                             const flightHrs = flightMins / 60;
-                            const rentalCarAdminHrs = 20 / 60; 
+                            const rentalCarAdminHrs = 20 / 60; // 20 mins rental car pickup
                             
+                            // Math: Known Office->Airport commute + Flight + Rental Car + Pure Regional Drive
                             const oneWayFlightTripHrs = homeOffice.aptDrive + flightHrs + rentalCarAdminHrs + localDriveHrs;
                             
                             if (oneWayFlightTripHrs < oneWayDriveHrs) {
@@ -411,10 +415,7 @@ window.calculateRowEstimate = async (row) => {
                         travelText = `Drive from ${homeOffice.name}`;
                     }
                     
-                    // E. STRICT TRAVEL BOUNDARIES & CLEAN INCREMENTS
                     travelHrs = Math.max(0.5, Math.min(8.0, travelHrs)); 
-                    
-                    // 🚨 THE FIX: Rounds UP to the nearest half-hour block (0.5, 1.0, 1.5, etc.)
                     travelHrs = Math.ceil(travelHrs * 2) / 2; 
                 }
             }
