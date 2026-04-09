@@ -280,26 +280,28 @@ window.autofillReqPremise = (selectEl) => {
 
 // Master Granular, DB-Driven Hybrid Routing Engine
 window.calculateRowEstimate = async (row) => {
-    // PROTECTED DB LOOKUP: Won't crash if DB is still loading!
+    // 1. SECURE DB LOOKUPS
     const getVal = (key) => {
         if (!state.pricingRules) return 0; 
         const rule = state.pricingRules.find(r => r.rule_key === key);
         return rule ? Number(rule.value) : 0;
     };
 
+    // Pull ALL Base & Constraint Rules directly from Supabase
     const HOURLY_RATE = getVal('rate_hourly') || 350;
     const INSP_BASE_HRS = getVal('insp_base_hrs') || 2.0;
     const REPORT_DRAFT_HRS = getVal('report_draft_hrs') || 8.0;   
     const REPORT_REVIEW_HRS = getVal('report_review_hrs') || 2.0; 
+    
+    // The New Dynamic Limits & Buffers
+    const RENTAL_ADMIN_HRS = getVal('rental_admin_hrs') || 0.33; 
+    const MIN_TRAVEL_HRS = getVal('travel_min_hrs') || 0.5;
+    const MAX_TRAVEL_HRS = getVal('travel_max_hrs') || 8.0;
+    const MIN_REPORT_HRS = getVal('report_min_hrs') || 10.0;
 
-    // Define Offices & Opening Dates
+    // --- DYNAMIC OFFICE LOOKUP ---
     const currentDate = new Date();
-    const allOffices = [
-        { id: 'akl', name: 'Auckland', lat: -36.8436, lng: 174.7570, openDate: new Date('2000-01-01'), aptDrive: 0.75 }, 
-        { id: 'wlg', name: 'Wellington', lat: -41.2835, lng: 174.7772, openDate: new Date('2026-05-01'), aptDrive: 0.40 }, 
-        { id: 'chc', name: 'Christchurch', lat: -43.5361, lng: 172.6074, openDate: new Date('2026-08-01'), aptDrive: 0.30 }  
-    ];
-    const openOffices = allOffices.filter(office => currentDate >= office.openDate);
+    const openOffices = (state.officesData || []).filter(office => currentDate >= new Date(office.open_date));
 
     const typeSelect = row.querySelector('.req-type-select');
     const siteAreaStr = row.querySelector('.req-site-area-input').value;
@@ -330,24 +332,20 @@ window.calculateRowEstimate = async (row) => {
     
     breakdownEl.innerText = "Calculating AI routing & precise timing...";
 
-    // 1. SMART AREA CALCULATION (3-Level Sampling Rule)
+    // 2. SMART AREA CALCULATION (3-Level Sampling Rule)
     const hasYard = siteArea > floorArea;
     let calcArea = Math.max(siteArea, floorArea); 
     
     if (numFloors > 3 && floorArea > 0) {
-        // YOUR NEW MATH: (Floor Area / Floor Count) * 3 Levels
         const areaPerFloor = floorArea / numFloors;
         const sampledFloorArea = areaPerFloor * 3;
-        
         calcArea = hasYard ? (siteArea + sampledFloorArea) : sampledFloorArea;
-        
     } else if (numFloors > 1 && floorArea > 0) {
-        // 2 to 3 levels: Bill the whole thing without sampling
         calcArea = hasYard ? (siteArea + floorArea) : floorArea; 
     }
     hiddenAreaEl.value = calcArea;
 
-    // 2. RUSH FEE
+    // 3. RUSH FEE
     let speedHrs = 0;
     let speedText = "Standard";
     if (deadlineStr) {
@@ -358,8 +356,8 @@ window.calculateRowEstimate = async (row) => {
         }
     }
 
-    // 3. MULTI-OFFICE HYBRID ROUTING ENGINE
-    let travelHrs = parseFloat(row.dataset.cachedTravel) || 0.5;
+    // 4. MULTI-OFFICE HYBRID ROUTING ENGINE
+    let travelHrs = parseFloat(row.dataset.cachedTravel) || MIN_TRAVEL_HRS;
     let travelText = row.dataset.cachedTravelText || "Pending Route";
     const fullAddr = `${addressStr}, ${regionStr}, ${countryStr}`;
     
@@ -377,7 +375,6 @@ window.calculateRowEstimate = async (row) => {
                 const dirJson = await dirRes.json();
                 
                 if (dirJson.routes && dirJson.routes.length > 0) {
-                    // Pure Mapbox driving time (No artificial traffic buffer)
                     const oneWayDriveHrs = dirJson.routes[0].duration / 3600;
                     
                     if (oneWayDriveHrs > 3.0 && state.airportsData && state.airportsData.length > 0) {
@@ -389,15 +386,13 @@ window.calculateRowEstimate = async (row) => {
                             const localDriveRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${destAirport.lng},${destAirport.lat};${destLng},${destLat}?access_token=${MAPBOX_TOKEN}`);
                             const localDriveJson = await localDriveRes.json();
                             
-                            // Pure Mapbox time for the regional destination drive
                             const localDriveHrs = (localDriveJson.routes && localDriveJson.routes.length > 0) 
-                                ? (localDriveJson.routes[0].duration / 3600) : 0.25;
+                                ? (localDriveJson.routes[0].duration / 3600) : MIN_TRAVEL_HRS;
 
                             const flightHrs = flightMins / 60;
-                            const rentalCarAdminHrs = 20 / 60; // 20 mins rental car pickup
                             
-                            // Math: Known Office->Airport commute + Flight + Rental Car + Pure Regional Drive
-                            const oneWayFlightTripHrs = homeOffice.aptDrive + flightHrs + rentalCarAdminHrs + localDriveHrs;
+                            // Math using strictly database-driven variables
+                            const oneWayFlightTripHrs = Number(homeOffice.apt_drive_hrs) + flightHrs + RENTAL_ADMIN_HRS + localDriveHrs;
                             
                             if (oneWayFlightTripHrs < oneWayDriveHrs) {
                                 travelHrs = oneWayFlightTripHrs * 2; 
@@ -415,13 +410,14 @@ window.calculateRowEstimate = async (row) => {
                         travelText = `Drive from ${homeOffice.name}`;
                     }
                     
-                    travelHrs = Math.max(0.5, Math.min(8.0, travelHrs)); 
+                    // Enforce DB-driven limits and round to nearest half hour
+                    travelHrs = Math.max(MIN_TRAVEL_HRS, Math.min(MAX_TRAVEL_HRS, travelHrs)); 
                     travelHrs = Math.ceil(travelHrs * 2) / 2; 
                 }
             }
         } catch(e) { 
             console.log("Routing failed.", e); 
-            travelHrs = 0.5; 
+            travelHrs = MIN_TRAVEL_HRS; 
         }
         row.dataset.cachedTravel = travelHrs;
         row.dataset.cachedTravelText = travelText;
@@ -429,7 +425,7 @@ window.calculateRowEstimate = async (row) => {
         travelText = row.dataset.cachedTravelText;
     }
 
-    // 4. INSPECTION MODIFIERS (Dynamic 500-sqm Tiers)
+    // 5. INSPECTION MODIFIERS
     let tierIndex = Math.ceil(calcArea / 500);
     if (tierIndex < 1) tierIndex = 1;
     if (tierIndex > 15) tierIndex = 15; 
@@ -441,10 +437,9 @@ window.calculateRowEstimate = async (row) => {
     const occHrs = getVal(row.querySelector('.req-occ-select').value);
     const docHrs = getVal(row.querySelector('.req-docs-select').value);
     
-    // Note: levelHrs has been permanently removed from this formula
     const inspectionHrs = INSP_BASE_HRS + areaHrs + typeHrs + renoHrs + occHrs + docHrs;
 
-    // 5. REPORT MODIFIERS 
+    // 6. REPORT MODIFIERS 
     const reportTypeKey = typeSelect.value ? `rep_${typeSelect.value}` : null;
     const reportTypeHrs = getVal(reportTypeKey);
     const regHrs = getVal(row.querySelector('.req-reg-select').value); 
@@ -452,9 +447,10 @@ window.calculateRowEstimate = async (row) => {
     const finalReviewHrs = REPORT_REVIEW_HRS + regHrs;
     let reportHrs = REPORT_DRAFT_HRS + finalReviewHrs + reportTypeHrs + speedHrs;
     
-    reportHrs = Math.max(10.0, reportHrs); 
+    // Enforce DB-driven Report Floor
+    reportHrs = Math.max(MIN_REPORT_HRS, reportHrs); 
 
-    // 6. TOTAL CALCULATION
+    // 7. TOTAL CALCULATION
     const totalHrs = travelHrs + inspectionHrs + reportHrs;
     const totalFee = totalHrs * HOURLY_RATE;
 
