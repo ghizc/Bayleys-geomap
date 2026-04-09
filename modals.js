@@ -471,14 +471,17 @@ window.calculateRowEstimate = async (row) => {
     // 7. TOTAL CALCULATION
     const totalHrs = travelHrs + inspectionHrs + reportHrs;
     
-    // THE FIX: Force the final dollar amount to be a clean, whole integer. No decimals allowed.
+    // Force the final dollar amount to be a clean, whole integer. No decimals allowed.
     const totalFee = Math.round(totalHrs * HOURLY_RATE);
 
-    breakdownEl.innerHTML = `Travel: ${travelHrs.toFixed(1)}h &nbsp;|&nbsp; Insp: ${inspectionHrs.toFixed(1)}h &nbsp;|&nbsp; Report: ${reportHrs.toFixed(1)}h`;
+    // THE FIX: Pass the decimals through the formatter for the UI
+    breakdownEl.innerHTML = `Travel: ${window.formatTimeReadable(travelHrs)} &nbsp;|&nbsp; Insp: ${window.formatTimeReadable(inspectionHrs)} &nbsp;|&nbsp; Report: ${window.formatTimeReadable(reportHrs)}`;
+    
     totalEl.innerText = `$${totalFee.toLocaleString()}`;
     totalEl.style.color = "#0284c7"; 
     hiddenCostEl.value = totalFee; 
     
+    // Keep raw decimals in the dataset so the WFM math doesn't break
     row.dataset.breakdownInsp = inspectionHrs.toFixed(1);
     row.dataset.breakdownRep = reportHrs.toFixed(1);
     row.dataset.breakdownTrav = travelHrs.toFixed(1);
