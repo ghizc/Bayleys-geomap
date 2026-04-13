@@ -39,7 +39,7 @@ window.getClientVipTier = (clientId) => {
         return s.includes('complete') || s.includes('invoice');
     });
 
-    // 2. Safely parse the budget (Strips out '$', commas, and text just in case)
+    // 2. Safely parse the budget
     const totalRevenue = completedReports.reduce((sum, r) => {
         if (!r.budget) return sum;
         const cleanBudget = parseFloat(String(r.budget).replace(/[^0-9.]/g, ''));
@@ -49,10 +49,15 @@ window.getClientVipTier = (clientId) => {
     let discount = 0;
     let tier = 'Standard';
 
-    if (totalRevenue >= 200000) { discount = 0.20; tier = 'Diamond (20% Off)'; }
-    else if (totalRevenue >= 150000) { discount = 0.15; tier = 'Platinum (15% Off)'; }
-    else if (totalRevenue >= 100000) { discount = 0.10; tier = 'Gold (10% Off)'; }
-    else if (totalRevenue >= 50000) { discount = 0.05; tier = 'Silver (5% Off)'; }
+    // 3. DYNAMIC DB LOOKUP
+    if (state.discountsData && state.discountsData.length > 0) {
+        // Since api.js ordered it descending, .find() grabs the highest threshold they meet
+        const activeTier = state.discountsData.find(t => totalRevenue >= Number(t.min_revenue));
+        if (activeTier) {
+            discount = Number(activeTier.discount_percentage);
+            tier = `${activeTier.name} (${discount * 100}% Off)`;
+        }
+    }
 
     return { revenue: totalRevenue, discount, tier };
 };
@@ -524,19 +529,20 @@ window.calculateRowEstimate = async (row) => {
 
     // --- NEXT TIER UPSELL TRACKER ---
     let nextTierUpsell = '';
-    if (vipStats.revenue < 200000) {
-        let nextThreshold = 50000;
-        let nextTierName = 'Silver (5% Off)';
-        
-        if (vipStats.revenue >= 150000) { nextThreshold = 200000; nextTierName = 'Diamond (20% Off)'; }
-        else if (vipStats.revenue >= 100000) { nextThreshold = 150000; nextTierName = 'Platinum (15% Off)'; }
-        else if (vipStats.revenue >= 50000) { nextThreshold = 100000; nextTierName = 'Gold (10% Off)'; }
+    if (state.discountsData && state.discountsData.length > 0) {
+        // Sort ascending to find the very next tier they HAVEN'T reached yet
+        const ascendingTiers = [...state.discountsData].sort((a, b) => Number(a.min_revenue) - Number(b.min_revenue));
+        const nextTier = ascendingTiers.find(t => Number(t.min_revenue) > vipStats.revenue);
 
-        const amountToGo = nextThreshold - vipStats.revenue;
-        nextTierUpsell = `
-            <div style="margin-top: 4px; font-size: 10px; color: #64748b; font-weight: 500; letter-spacing: 0.2px;">
-                Only <strong>$${amountToGo.toLocaleString()}</strong> to unlock <strong>${nextTierName}</strong>
-            </div>`;
+        if (nextTier) {
+            const amountToGo = Number(nextTier.min_revenue) - vipStats.revenue;
+            const nextTierName = `${nextTier.name} (${Number(nextTier.discount_percentage) * 100}% Off)`;
+            
+            nextTierUpsell = `
+                <div style="margin-top: 4px; font-size: 10px; color: #64748b; font-weight: 500; letter-spacing: 0.2px;">
+                    Only <strong>$${amountToGo.toLocaleString()}</strong> to unlock <strong>${nextTierName}</strong>
+                </div>`;
+        }
     }
 
     // Pass the decimals through the formatter for the UI
