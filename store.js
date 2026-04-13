@@ -11,6 +11,7 @@ export const state = {
     pricingRules: [],
     airportsData: [],
     officesData: [],
+    discountsData: [], 
     
     // UI State
     currentMapStyle: null,
