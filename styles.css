@@ -357,10 +357,11 @@ body.sim-tablet   { border-radius: 24px; }
     .sidebar { width: 100% !important; height: 100% !important; border: none !important; z-index: 10; position: absolute; top: 0; left: 0; box-shadow: none !important; overflow: hidden !important; }
     .sidebar-scroll { overflow-x: hidden !important; overflow-y: auto; width: 100%; } 
     
-    #clientListScreen .main-content, #tabQuotesBtn, #btnEnrichData { display: none !important; }
+    /* Removed #clientListScreen .main-content from the display: none block */
+    #tabQuotesBtn, #btnEnrichData { display: none !important; }
     
-    /* AGGRESSIVE SCROLLBAR REMOVAL FOR SWIPE CONTAINER */
-    #premisesScreen .main-content { 
+    /* AGGRESSIVE SCROLLBAR REMOVAL & SWIPE CONTAINER (Now applies to BOTH screens) */
+    #premisesScreen .main-content, #clientListScreen .main-content { 
         position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
         z-index: -1; opacity: 0; pointer-events: none; 
         display: flex !important; flex-direction: row !important; 
@@ -369,13 +370,18 @@ body.sim-tablet   { border-radius: 24px; }
         scrollbar-width: none !important; /* Firefox */
         -ms-overflow-style: none !important; /* IE/Edge */
     }
-    #premisesScreen .main-content::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
-    #premisesScreen:has(.detail-panel.active) .main-content { z-index: 50; opacity: 1; pointer-events: all; }
+    #premisesScreen .main-content::-webkit-scrollbar, #clientListScreen .main-content::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
     
-    /* FIX: Force detail-panel to completely hide its overflow. Only .detail-content will scroll. */
+    /* Reveal the container when the Detail Panel is clicked */
+    #premisesScreen:has(.detail-panel.active) .main-content, 
+    #clientListScreen:has(.detail-panel.active) .main-content { 
+        z-index: 50; opacity: 1; pointer-events: all; 
+    }
+    
+    /* Make sure BOTH maps behave correctly in the swipe row */
     .detail-panel { position: relative !important; width: 100% !important; height: 100% !important; flex-shrink: 0; scroll-snap-align: start; border-radius: 0 !important; order: 1 !important; overflow: hidden !important; }
-    #premisesMap { position: relative !important; width: 100% !important; height: 100% !important; flex-shrink: 0; scroll-snap-align: start; order: 2 !important; overflow: hidden !important; }
-    
+    #premisesMap, #adminMap { position: relative !important; width: 100% !important; height: 100% !important; flex-shrink: 0; scroll-snap-align: start; order: 2 !important; overflow: hidden !important; }
+
     .detail-content { overflow-y: auto !important; overflow-x: hidden !important; } /* THE ONLY ALLOWED SCROLLBAR */
 
     /* Login Compression */
@@ -448,28 +454,40 @@ body.sim-mobile .sidebar, body.sim-foldable .sidebar, body.sim-tablet.sim-portra
 body.sim-mobile .sidebar-scroll, body.sim-foldable .sidebar-scroll, body.sim-tablet.sim-portrait .sidebar-scroll { overflow-x: hidden !important; width: 100%; }
 
 body.sim-mobile #clientListScreen .main-content, body.sim-foldable #clientListScreen .main-content, body.sim-tablet.sim-portrait #clientListScreen .main-content { display: none !important; }
+/* Removed clientListScreen .main-content from display: none */
 body.sim-mobile #tabQuotesBtn, body.sim-foldable #tabQuotesBtn, body.sim-tablet.sim-portrait #tabQuotesBtn { display: none !important; }
 
-/* AGGRESSIVE SCROLLBAR REMOVAL FOR SIMULATOR SWIPE CONTAINER */
-body.sim-mobile #premisesScreen .main-content, body.sim-foldable #premisesScreen .main-content, body.sim-tablet.sim-portrait #premisesScreen .main-content { 
+/* AGGRESSIVE SCROLLBAR REMOVAL FOR SIMULATOR SWIPE CONTAINER (BOTH SCREENS) */
+body.sim-mobile #premisesScreen .main-content, body.sim-foldable #premisesScreen .main-content, body.sim-tablet.sim-portrait #premisesScreen .main-content,
+body.sim-mobile #clientListScreen .main-content, body.sim-foldable #clientListScreen .main-content, body.sim-tablet.sim-portrait #clientListScreen .main-content { 
     position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; opacity: 0; display: flex !important; flex-direction: row !important; 
     overflow-x: auto !important; overflow-y: hidden !important; scroll-snap-type: x mandatory; 
     scrollbar-width: none !important; -ms-overflow-style: none !important;
 }
-body.sim-mobile #premisesScreen .main-content::-webkit-scrollbar, body.sim-foldable #premisesScreen .main-content::-webkit-scrollbar, body.sim-tablet.sim-portrait #premisesScreen .main-content::-webkit-scrollbar { 
+
+body.sim-mobile #premisesScreen .main-content::-webkit-scrollbar, body.sim-foldable #premisesScreen .main-content::-webkit-scrollbar, body.sim-tablet.sim-portrait #premisesScreen .main-content::-webkit-scrollbar,
+body.sim-mobile #clientListScreen .main-content::-webkit-scrollbar, body.sim-foldable #clientListScreen .main-content::-webkit-scrollbar, body.sim-tablet.sim-portrait #clientListScreen .main-content::-webkit-scrollbar { 
     display: none !important; width: 0 !important; height: 0 !important; 
 }
-body.sim-mobile #premisesScreen:has(.detail-panel.active) .main-content, body.sim-foldable #premisesScreen:has(.detail-panel.active) .main-content, body.sim-tablet.sim-portrait #premisesScreen:has(.detail-panel.active) .main-content { z-index: 50; opacity: 1; pointer-events: all; }
+
+body.sim-mobile #premisesScreen:has(.detail-panel.active) .main-content, body.sim-foldable #premisesScreen:has(.detail-panel.active) .main-content, body.sim-tablet.sim-portrait #premisesScreen:has(.detail-panel.active) .main-content,
+body.sim-mobile #clientListScreen:has(.detail-panel.active) .main-content, body.sim-foldable #clientListScreen:has(.detail-panel.active) .main-content, body.sim-tablet.sim-portrait #clientListScreen:has(.detail-panel.active) .main-content { 
+    z-index: 50; opacity: 1; pointer-events: all; 
+}
 
 /* FIX: Absolute geometry reset to ensure zero bleeding between panels */
 body.sim-mobile .detail-panel, body.sim-foldable .detail-panel, body.sim-tablet.sim-portrait .detail-panel { 
     position: relative !important; width: 100% !important; height: 100% !important; flex-shrink: 0; scroll-snap-align: start; order: 1 !important; overflow: hidden !important;
     top: 0 !important; left: 0 !important; bottom: 0 !important; right: 0 !important; margin: 0 !important; border: none !important; border-radius: 0 !important;
 }
-body.sim-mobile #premisesMap, body.sim-foldable #premisesMap, body.sim-tablet.sim-portrait #premisesMap { 
+
+/* Added #adminMap to the swipe logic */
+body.sim-mobile #premisesMap, body.sim-foldable #premisesMap, body.sim-tablet.sim-portrait #premisesMap,
+body.sim-mobile #adminMap, body.sim-foldable #adminMap, body.sim-tablet.sim-portrait #adminMap { 
     position: relative !important; width: 100% !important; height: 100% !important; flex-shrink: 0; scroll-snap-align: start; order: 2 !important; overflow: hidden !important; 
     top: 0 !important; left: 0 !important; bottom: 0 !important; right: 0 !important; margin: 0 !important; border: none !important;
 }
+
 body.sim-mobile .detail-content, body.sim-foldable .detail-content, body.sim-tablet.sim-portrait .detail-content { overflow-y: auto !important; overflow-x: hidden !important; }
 
 body.sim-mobile .login-card, body.sim-foldable .login-card, body.sim-tablet.sim-portrait .login-card { padding: 20px !important; max-height: 90%; overflow-y: auto; width: 320px; }
@@ -505,3 +523,125 @@ body.sim-tablet.sim-landscape #clientList,
 body.sim-tablet.sim-landscape #premisesList {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
+
+/* ==========================================
+   🚨 MODAL RESPONSIVENESS & SIMULATOR FIXES
+   ========================================== */
+
+/* 1. Fix for real mobile/tablet screens */
+@media (max-width: 900px) {
+    .modal-card { width: 95% !important; max-height: 90% !important; display: flex; flex-direction: column; }
+    .modal-body { flex: 1; overflow-y: auto; max-height: none !important; }
+}
+
+/* 2. Trapping the overlay strictly inside the simulator */
+body.sim-mobile .modal-overlay, 
+body.sim-foldable .modal-overlay, 
+body.sim-tablet .modal-overlay {
+    position: absolute !important; 
+    width: 100% !important; 
+    height: 100% !important;
+}
+
+/* 3. Overriding the inline 750px width and 75vh height */
+body.sim-mobile .modal-card, 
+body.sim-foldable .modal-card, 
+body.sim-tablet .modal-card { 
+    width: 95% !important; 
+    max-height: 90% !important; 
+    display: flex !important; 
+    flex-direction: column !important; 
+}
+
+/* 4. Forcing the inner body to handle the scroll so the header/footer stay visible */
+body.sim-mobile .modal-body, 
+body.sim-foldable .modal-body, 
+body.sim-tablet .modal-body { 
+    flex: 1 !important; 
+    overflow-y: auto !important; 
+    max-height: none !important; 
+}
+
+/* ==========================================
+   🚨 MODAL SCROLLING & FORM WRAPPER FIX
+   ========================================== */
+
+/* 1. Fix for real mobile/tablet screens */
+@media (max-width: 900px) {
+    .modal-card form { 
+        display: flex !important; 
+        flex-direction: column !important; 
+        flex: 1 !important; 
+        min-height: 0 !important; 
+    }
+}
+
+/* 2. Fix for all Simulator shapes */
+body.sim-mobile .modal-card form, 
+body.sim-foldable .modal-card form, 
+body.sim-tablet .modal-card form { 
+    display: flex !important; 
+    flex-direction: column !important; 
+    flex: 1 !important; 
+    min-height: 0 !important; 
+}
+
+/* ==========================================
+   🚨 MODAL HEADER SQUISH FIX (PHONES)
+   ========================================== */
+
+@media (max-width: 480px) {
+    /* Stacks "Property Manager" and "+ Add New Contact" */
+    .label-with-action { 
+        flex-direction: column !important; 
+        align-items: flex-start !important; 
+        gap: 6px; 
+    }
+    /* Stacks "Premises Details" and "+ Add Another Premise" */
+    #requestReportForm .modal-body > div[style*="space-between"] { 
+        flex-direction: column !important; 
+        align-items: flex-start !important; 
+        gap: 12px; 
+    }
+}
+
+/* Apply the exact same logic to the Laptop Simulator */
+body.sim-mobile .label-with-action { 
+    flex-direction: column !important; 
+    align-items: flex-start !important; 
+    gap: 6px; 
+}
+body.sim-mobile #requestReportForm .modal-body > div[style*="space-between"] { 
+    flex-direction: column !important; 
+    align-items: flex-start !important; 
+    gap: 12px; 
+}
+
+/* ==========================================
+   🚨 DYNAMIC MODAL FORM SQUISH FIX
+   ========================================== */
+
+/* 1. Foldable & Tablet Portrait (Intermediate Size - Drops from 4 cols to 2 cols) */
+@media (max-width: 900px) {
+    .form-row { flex-direction: column; gap: 12px; }
+    .premise-req-row div[style*="repeat(4, 1fr)"] { grid-template-columns: 1fr 1fr !important; }
+    .premise-req-row [style*="grid-column: span 4"] { grid-column: span 2 !important; }
+}
+body.sim-foldable .form-row, body.sim-tablet.sim-portrait .form-row { flex-direction: column; gap: 12px; }
+body.sim-foldable .premise-req-row div[style*="repeat(4, 1fr)"], body.sim-tablet.sim-portrait .premise-req-row div[style*="repeat(4, 1fr)"] { grid-template-columns: 1fr 1fr !important; }
+body.sim-foldable .premise-req-row [style*="grid-column: span 4"], body.sim-tablet.sim-portrait .premise-req-row [style*="grid-column: span 4"] { grid-column: span 2 !important; }
+
+/* 2. Phone (Tiny Size - Drops EVERYTHING to a single column, reclaims padding) */
+@media (max-width: 480px) {
+    /* Removed the ">" so it targets NESTED inline grids too! */
+    .premise-req-row div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+    .premise-req-row [style*="grid-column"] { grid-column: span 1 !important; }
+    /* Reclaim wasted space on tiny screens */
+    .premise-req-row { padding: 16px !important; } 
+    .premise-req-row > div[style*="padding: 20px"] { padding: 12px !important; } 
+}
+body.sim-mobile .form-row { flex-direction: column; gap: 12px; }
+body.sim-mobile .premise-req-row div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+body.sim-mobile .premise-req-row [style*="grid-column"] { grid-column: span 1 !important; }
+body.sim-mobile .premise-req-row { padding: 16px !important; }
+body.sim-mobile .premise-req-row > div[style*="padding: 20px"] { padding: 12px !important; }
