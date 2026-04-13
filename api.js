@@ -156,3 +156,10 @@ export async function getOffices() {
     if (error) throw error;
     return data || [];
 }
+
+export async function getDiscounts() {
+    // Order descending so highest revenue tier is first
+    const { data, error } = await supabase.from('discounts').select('*').eq('is_active', true).order('min_revenue', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
