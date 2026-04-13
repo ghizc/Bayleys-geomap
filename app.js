@@ -95,29 +95,38 @@ window.triggerClientLoad = async (clientId) => {
     loadClientView();
 };
 
-window.highlightSidebarCard = (premiseId) => {
+window.highlightSidebarCard = (targetId) => {
     // 1. Remove highlight from all cards
     document.querySelectorAll('.card-item').forEach(card => card.classList.remove('active-card'));
     
-    if (!premiseId) return;
+    if (!targetId) return;
 
-    // 2. Find the card that matches this premise and highlight it
+    // 2. Find the precise card and scroll to it ONCE
+    let foundCard = null;
     document.querySelectorAll('.card-item').forEach(card => {
         const onclickText = card.getAttribute('onclick') || '';
-        if (onclickText.includes(premiseId)) {
+        // Checking for the exact ID wrapped in quotes prevents false matches and duplicates
+        if (onclickText.includes(`'${targetId}'`) && !foundCard) {
             card.classList.add('active-card');
-            // Smoothly scroll the sidebar so the card is visible
-            card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            foundCard = card; 
         }
     });
+
+    if (foundCard) {
+        foundCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 };
 
-window.triggerDetailLoad = (premiseId) => {
+window.triggerDetailLoad = (premiseId, reportId = null) => {
     const p = state.premisesData.find(x => String(x.id) === String(premiseId));
     if (p) {
         import('./map.js').then(mapMod => mapMod.highlightMarker(p.id));
-        window.highlightSidebarCard(p.id);
-        showDetail(p);
+        
+        // Pass the reportId if we clicked a report, otherwise fallback to the premiseId
+        window.highlightSidebarCard(reportId || p.id);
+        
+        // Pass the reportId into the UI so it can feature the correct data!
+        showDetail(p, reportId);
     }
 };
 
@@ -298,7 +307,8 @@ window.onload = async () => {
         import('./api.js').then(async (apiMod) => {
             state.pricingRules = await apiMod.getPricingRules();
             state.airportsData = await apiMod.getAirports(); 
-            state.officesData = await apiMod.getOffices(); // <-- Added!
+            state.officesData = await apiMod.getOffices();
+            state.discountsData = await apiMod.getDiscounts();
         });
         
         // Simple ping to wake up DB
