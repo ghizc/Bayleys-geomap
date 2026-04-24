@@ -66,6 +66,265 @@ window.filterDashboard = (filterType, cardElement) => {
     });
 };
 
+// --- CLEAN HIGH-SPEED XERO MAPPING ---
+let localDbClients = [];
+let localXeroContacts = [];
+
+const cleanForMatch = (str) => {
+    return (str || "").toLowerCase()
+        .replace(/\b(ltd|limited|trust|partners|co|group|nz|new zealand|bayleys)\b/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+};
+
+window.openXeroMapping = async () => {
+    const modal = document.getElementById('xeroMappingModal');
+    const loading = document.getElementById('mappingLoading');
+    const content = document.getElementById('mappingContent');
+    
+    modal.style.display = 'flex';
+    loading.style.display = 'block';
+    content.style.display = 'none';
+
+    try {
+        // 1. Fetch Data
+        const { data: dbClients } = await supabase.from('clients')
+            .select('id, name, xero_contact_id')
+            .is('xero_contact_id', null)
+            .order('name');
+        
+        const { data: xeroData } = await supabase.functions.invoke('xero-get-contacts');
+        
+        localDbClients = dbClients || [];
+        localXeroContacts = xeroData?.contacts || [];
+
+        // Safety check: if no contacts come back, warn immediately
+        if (localXeroContacts.length === 0) {
+            loading.innerHTML = `<div style="padding:20px; color:#ef4444; font-weight:bold;">⚠️ Error: Zero contacts received from Xero.<br><small>Please click 'Connect Xero' on the map menu again to authorize access.</small></div>`;
+            return;
+        }
+
+        // 2. Build the Clean UI Shell (No Search Bar)
+        content.innerHTML = `
+            <div style="padding: 12px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <div style="font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Clients to Link: <span id="remainingCount" style="color: #0ea5e9; font-size: 14px;">${localDbClients.length}</span>
+                </div>
+                <div style="font-size: 10px; color: #10b981; font-weight: 700; display: flex; align-items: center; gap: 4px; text-transform: uppercase;">
+                    <span style="font-size: 14px;">✨</span> Auto-Matcher Active
+                </div>
+            </div>
+            <div style="max-height: 550px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tbody id="mappingTableBody"></tbody>
+                </table>
+            </div>
+        `;
+
+        const renderRows = () => {
+            const tbody = document.getElementById('mappingTableBody');
+            
+            // Build the static Xero options list once for performance
+            const xeroOptionsHtml = localXeroContacts.map(xc => `<option value="${xc.id}">${xc.name}</option>`).join('');
+
+            // Show 20 clients at a time for a clean, fast list
+            const batch = localDbClients.slice(0, 20);
+
+            tbody.innerHTML = batch.map(client => {
+                const cNameClean = cleanForMatch(client.name);
+                
+                // Logic: Does this client have a "Good" suggestion in Xero?
+                const hasMatch = localXeroContacts.some(xc => {
+                    const xcClean = cleanForMatch(xc.name);
+                    return (xcClean.length > 2 && (xcClean.includes(cNameClean) || cNameClean.includes(xcClean)));
+                });
+
+                return `
+                <tr id="row-${client.id}" style="border-bottom: 1px solid #f1f5f9; background: ${hasMatch ? '#f0fdfa' : 'white'}; transition: 0.3s;">
+                    <td style="padding: 20px; width: 35%; vertical-align: top;">
+                        <div style="font-weight: 700; color: #0f172a; font-size: 14px; line-height: 1.2;">${client.name}</div>
+                        ${hasMatch ? `<div style="font-size: 9px; color: #0ea5e9; font-weight: 800; text-transform: uppercase; margin-top: 6px; letter-spacing: 0.5px;">Suggestion Ready</div>` : ''}
+                    </td>
+                    <td style="padding: 12px 10px;">
+                        <select id="select-${client.id}" multiple class="xero-select-box" style="width: 100%; height: 90px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 12px; padding: 4px; background: white;">
+                            ${xeroOptionsHtml}
+                        </select>
+                    </td>
+                    <td style="padding: 20px; width: 110px; text-align: right; vertical-align: middle;">
+                        <button onclick="window.saveXeroLink('${client.id}')" 
+                            style="background: ${hasMatch ? '#0ea5e9' : '#10b981'}; color: white; border: none; padding: 12px 18px; border-radius: 8px; cursor: pointer; font-weight: 800; font-size: 11px; white-space: nowrap; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                            ${hasMatch ? 'CONFIRM' : 'LINK'}
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            // After rendering the HTML, programmatically highlight the matched items in the select boxes
+            batch.forEach(client => {
+                const cNameClean = cleanForMatch(client.name);
+                const matchedIds = localXeroContacts
+                    .filter(xc => {
+                        const xcClean = cleanForMatch(xc.name);
+                        return (xcClean.length > 2 && (xcClean.includes(cNameClean) || cNameClean.includes(xcClean)));
+                    })
+                    .map(xc => xc.id);
+
+                const select = document.getElementById(`select-${client.id}`);
+                if (select) {
+                    Array.from(select.options).forEach(opt => {
+                        if (matchedIds.includes(opt.value)) opt.selected = true;
+                    });
+                }
+            });
+        };
+
+        renderRows();
+        loading.style.display = 'none';
+        content.style.display = 'block';
+
+    } catch (err) {
+        loading.innerHTML = `<div style="padding:20px; color:#ef4444;">Error: ${err.message}</div>`;
+    }
+};
+
+window.saveXeroLink = async (clientId) => {
+    const selectEl = document.getElementById(`select-${clientId}`);
+    const selectedIds = Array.from(selectEl.selectedOptions).map(opt => opt.value);
+    
+    if (selectedIds.length === 0) return alert("Select at least one Xero contact.");
+
+    const btn = selectEl.parentElement.nextElementSibling.querySelector('button');
+    btn.innerText = "⌛";
+    btn.disabled = true;
+
+    try {
+        const { error } = await supabase.from('clients')
+            .update({ xero_contact_id: selectedIds.join(',') })
+            .eq('id', clientId);
+
+        if (error) throw error;
+
+        // Success animation
+        const row = document.getElementById(`row-${clientId}`);
+        row.style.background = '#f0fdf4';
+        row.style.opacity = '0';
+        row.style.transform = 'scale(0.98)';
+        
+        localDbClients = localDbClients.filter(c => c.id !== clientId);
+        
+        setTimeout(() => {
+            row.remove();
+            const countEl = document.getElementById('remainingCount');
+            if (countEl) countEl.innerText = localDbClients.length;
+            
+            // If the visible list is almost empty, refresh to pull the next 20 unmapped clients
+            const currentListCount = document.getElementById('mappingTableBody').children.length;
+            if (currentListCount < 5 && localDbClients.length > 0) {
+                window.openXeroMapping(); 
+            }
+        }, 300);
+
+    } catch (err) {
+        alert("Failed to save: " + err.message);
+        btn.innerText = "LINK";
+        btn.disabled = false;
+    }
+};
+
+// --- TARGETED XERO CLIENT SYNC UI ---
+window.openTargetedXeroSync = async () => {
+    const modal = document.getElementById('xeroMappingModal');
+    const loading = document.getElementById('mappingLoading');
+    const content = document.getElementById('mappingContent');
+    
+    modal.style.display = 'flex';
+    loading.style.display = 'block';
+    content.style.display = 'none';
+
+    try {
+        // Fetch only clients that ARE mapped to Xero
+        const { data: linkedClients } = await supabase.from('clients')
+            .select('id, name')
+            .not('xero_contact_id', 'is', null)
+            .order('name');
+
+        if (!linkedClients || linkedClients.length === 0) {
+            loading.innerHTML = `<span style="color: #ef4444; font-weight:bold;">No clients are linked to Xero yet. Please link them first.</span>`;
+            return;
+        }
+
+        const optionsHtml = linkedClients.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+        content.innerHTML = `
+            <div style="padding: 24px; text-align: center; background: #f8fafc; border-bottom: 1px solid #e2e8f0; border-radius: 8px;">
+                <h3 style="margin-top: 0; color: #0f172a; font-size: 16px;">Targeted Budget Sync</h3>
+                <p style="font-size: 12px; color: #64748b; margin-bottom: 20px;">Select a client below to scan Xero for their unbudgeted jobs.</p>
+                
+                <select id="targetSyncClient" style="width: 100%; padding: 12px; border: 2px solid #0ea5e9; border-radius: 8px; font-size: 14px; margin-bottom: 20px; outline: none; cursor: pointer;">
+                    <option value="" disabled selected>-- Select a Client --</option>
+                    ${optionsHtml}
+                </select>
+
+                <button id="runTargetSyncBtn" style="width: 100%; background: #10b981; color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 800; font-size: 14px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);">
+                    START TARGETED SYNC
+                </button>
+                
+                <div id="syncResultBox" style="margin-top: 20px; font-size: 12px; color: #0284c7; font-weight: 600; min-height: 20px; padding: 10px; border-radius: 6px; display: none; text-align: left;"></div>
+            </div>
+        `;
+
+        document.getElementById('runTargetSyncBtn').onclick = async function() {
+            const clientId = document.getElementById('targetSyncClient').value;
+            if (!clientId) return alert("Please select a client first.");
+
+            const btn = this;
+            const resBox = document.getElementById('syncResultBox');
+            
+            btn.innerHTML = "⏳ Scanning Xero History...";
+            btn.disabled = true;
+            btn.style.background = "#94a3b8";
+            resBox.style.display = 'none';
+
+            try {
+                // 🌟 Calling your overwritten existing edge function
+                const { data, error } = await supabase.functions.invoke('xero-budget-sync', {
+                    body: { clientId }
+                });
+
+                if (error) throw error;
+                if (data.error) throw new Error(data.error);
+
+                resBox.style.display = 'block';
+                resBox.style.background = '#f0fdf4';
+                resBox.style.border = '1px solid #10b981';
+                resBox.style.color = '#047857';
+                
+                let detailsHtml = (data.details || []).map(d => `<div style="margin-top:6px;">${d}</div>`).join('');
+                resBox.innerHTML = `<div style="margin-bottom: 8px;"><strong>${data.message}</strong></div>${detailsHtml}`;
+
+                if (window.refreshAppAdminData) await window.refreshAppAdminData();
+
+            } catch (err) {
+                resBox.style.display = 'block';
+                resBox.style.background = '#fef2f2';
+                resBox.style.border = '1px solid #ef4444';
+                resBox.style.color = '#b91c1c';
+                resBox.innerHTML = `❌ Error: ${err.message}`;
+            } finally {
+                btn.innerHTML = "START TARGETED SYNC";
+                btn.disabled = false;
+                btn.style.background = "#10b981";
+            }
+        };
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+
+    } catch (err) {
+        loading.innerHTML = `<span style="color: #ef4444;">Error loading clients: ${err.message}</span>`;
+    }
+};
+
 window.switchAdminTab = (type) => {
     state.activeAdminTab = type;
     document.getElementById('tabClientsBtn').classList.toggle('active', type === 'clients');
@@ -319,6 +578,7 @@ window.onload = async () => {
         // --- NEW: Load the Database Rules, Airports, & Offices ---
         import('./api.js').then(async (apiMod) => {
             state.pricingRules = await apiMod.getPricingRules();
+            state.estimationMatrix = await apiMod.getEstimationMatrix();
             state.airportsData = await apiMod.getAirports(); 
             state.officesData = await apiMod.getOffices();
             state.discountsData = await apiMod.getDiscounts();
