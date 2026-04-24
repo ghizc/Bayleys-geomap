@@ -6,7 +6,6 @@ import { supabase, uploadMultipleFiles } from './api.js';
 import { log, filterAdminView, showDetail } from './ui.js';
 
 // --- HELPER: Find closest location using Haversine (Crow-flies distance) ---
-// (Cleaned up: Only ONE copy of this function now!)
 function getClosestLocation(lat, lng, locations) {
     if (!locations || locations.length === 0) return null;
     let closest = null;
@@ -31,7 +30,6 @@ function getClosestLocation(lat, lng, locations) {
 window.getClientVipTier = (clientId) => {
     if (!state.allReportsData || !clientId) return { revenue: 0, discount: 0, tier: 'Standard' };
 
-    // 1. Safely find finalized reports (Matches "Complete", "Completed", "Invoice", "Invoiced")
     const completedReports = state.allReportsData.filter(r => {
         if (String(r.client_id) !== String(clientId)) return false;
         if (!r.status) return false;
@@ -39,7 +37,6 @@ window.getClientVipTier = (clientId) => {
         return s.includes('complete') || s.includes('invoice');
     });
 
-    // 2. Safely parse the budget
     const totalRevenue = completedReports.reduce((sum, r) => {
         if (!r.budget) return sum;
         const cleanBudget = parseFloat(String(r.budget).replace(/[^0-9.]/g, ''));
@@ -49,9 +46,7 @@ window.getClientVipTier = (clientId) => {
     let discount = 0;
     let tier = 'Standard';
 
-    // 3. DYNAMIC DB LOOKUP
     if (state.discountsData && state.discountsData.length > 0) {
-        // Since api.js ordered it descending, .find() grabs the highest threshold they meet
         const activeTier = state.discountsData.find(t => totalRevenue >= Number(t.min_revenue));
         if (activeTier) {
             discount = Number(activeTier.discount_percentage);
@@ -63,13 +58,11 @@ window.getClientVipTier = (clientId) => {
 };
 
 // --- REQUEST REPORT MODAL ---
-// Function to dynamically add a Premise + Report Type row
 window.addPremiseRow = () => {
     const container = document.getElementById('reqPremisesContainer');
     const rowCount = container.children.length;
     const uniqueId = Date.now().toString(36) + Math.random().toString(36).substr(2); 
 
-    // Generate Saved Locations Dropdown
     let savedPremisesOptions = '';
     const clientId = state.currentUser?.clientSpoof?.id || state.currentUser?.id;
     
@@ -152,7 +145,7 @@ window.addPremiseRow = () => {
                     <option value="" disabled selected>Select...</option>
                     <option value="BCA">BCA (Building Condition Assessment)</option>
                     <option value="COO">COO (Change of Operator/Owner)</option>
-                    <option value="PCR">PCR (Property Condition Report)</option>
+                    <option value="PCR">PCR (Premises Condition Report)</option>
                     <option value="RMP">RMP (Roof Maintenance Plan)</option>
                     <option value="Capex">CapEx (Capital Expenditure)</option>
                     <option value="RCA">RCA (Reinstatement Cost Assessment)</option>
@@ -174,22 +167,15 @@ window.addPremiseRow = () => {
                 <label class="form-label" style="font-size: 11px;">Delivery Deadline</label>
                 <input type="date" class="form-input req-deadline-input" required style="height: 44px; box-sizing: border-box; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
             </div>
-            <div class="form-group" style="margin: 0;">
+            <div class="form-group" style="margin: 0; grid-column: span 2;">
                 <label class="form-label" style="font-size: 11px;">Order # (Opt)</label>
                 <input type="text" class="form-input req-co-input" style="height: 44px; box-sizing: border-box; background: white;" placeholder="e.g. PO-9921">
-            </div>
-            <div class="form-group" style="margin: 0;">
-                <label class="form-label" style="font-size: 11px;">Legal Context</label>
-                <select class="form-input req-reg-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
-                    <option value="0">Standard</option>
-                    <option value="legal_context_hrs">Legal / Dispute</option>
-                </select>
             </div>
 
             <div style="grid-column: span 4; height: 1px; background: #e2e8f0; margin: 4px 0;"></div>
 
             <div class="form-group" style="margin: 0; grid-column: span 2;">
-                <label class="form-label" style="font-size: 11px; color: #64748b;">Building Type</label>
+                <label class="form-label" style="font-size: 11px; color: #64748b;">Building Sector</label>
                 <select class="form-input req-bldg-type-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
                     <option value="type_industrial">Industrial/Warehouse</option>
                     <option value="type_office">Office/Commercial</option>
@@ -197,55 +183,20 @@ window.addPremiseRow = () => {
                     <option value="type_special">Special Purpose</option>
                 </select>
             </div>
-            <div class="form-group" style="margin: 0;">
-                <label class="form-label" style="font-size: 11px; color: #64748b;">Levels</label>
-                <select class="form-input req-levels-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
-                    <option value="Groundfloor" data-floors="1">Groundfloor</option>
-                    <option value="1 Level" data-floors="1">1 Level</option>
-                    <option value="2 Levels" data-floors="2">2 Levels</option>
-                    <option value="3 Levels" data-floors="3">3 Levels</option>
-                    <option value="4 Levels" data-floors="4">4 Levels</option>
-                    <option value="5 Levels" data-floors="5">5 Levels</option>
-                    <option value="6 Levels" data-floors="6">6 Levels</option>
-                    <option value="7 Levels" data-floors="7">7 Levels</option>
-                    <option value="8 Levels" data-floors="8">8 Levels</option>
-                    <option value="9 Levels" data-floors="9">9 Levels</option>
-                    <option value="10+ Levels" data-floors="10">10+ Levels</option>
-                    <option value="20+ Levels" data-floors="20">20+ Levels</option>
-                    <option value="30+ Levels" data-floors="30">30+ Levels</option>
-                    <option value="40+ Levels" data-floors="40">40+ Levels</option>
-                    <option value="50+ Levels" data-floors="50">50+ Levels</option>
-                    <option value="60+ Levels" data-floors="60">60+ Levels</option>
-                    <option value="70+ Levels" data-floors="70">70+ Levels</option>
-                    <option value="80+ Levels" data-floors="80">80+ Levels</option>
-                    <option value="90+ Levels" data-floors="90">90+ Levels</option>
-                    <option value="100+ Levels" data-floors="100">100+ Levels</option>
-                </select>
-            </div>
-            <div class="form-group" style="margin: 0;">
-                <label class="form-label" style="font-size: 11px; color: #64748b;">Renovations</label>
-                <select class="form-input req-reno-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
-                    <option value="reno_none">Original / None</option>
-                    <option value="reno_minor">Minor / 1 Ext.</option>
-                    <option value="reno_major">Major / Multiple</option>
-                </select>
-            </div>
-
             <div class="form-group" style="margin: 0; grid-column: span 2;">
-                <label class="form-label" style="font-size: 11px; color: #64748b;">Occupancy</label>
-                <select class="form-input req-occ-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
-                    <option value="occ_vacant">Vacant / Empty</option>
-                    <option value="occ_partial">Partially Occupied</option>
-                    <option value="occ_full">Fully Occupied</option>
+                <label class="form-label" style="font-size: 11px; color: #64748b;">Complexity Config</label>
+                <select class="form-input req-complexity-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
+                    <option value="simple">Simple (Cat 1)</option>
+                    <option value="standard" selected>Standard (Cat 2)</option>
+                    <option value="complex">Complex (Cat 3)</option>
                 </select>
             </div>
-            <div class="form-group" style="margin: 0; grid-column: span 2;">
-                <label class="form-label" style="font-size: 11px; color: #64748b;">Existing Docs</label>
-                <select class="form-input req-docs-select" style="height: 44px; box-sizing: border-box; cursor:pointer; background: white;" onchange="window.calculateRowEstimate(this.closest('.premise-req-row'))">
-                    <option value="docs_full">Full Plans</option>
-                    <option value="docs_partial">Partial Plans</option>
-                    <option value="docs_none">No Plans</option>
-                </select>
+            
+            <div style="grid-column: span 4; margin-top: -8px;">
+                 <div class="complexity-desc" style="font-size: 10.5px; color: #0369a1; line-height: 1.4; background: #f0f9ff; padding: 8px 12px; border-radius: 6px; border: 1px solid #bae6fd; display: flex; align-items: flex-start;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 8px; flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span class="complexity-span-text">Enter area and sector to view your exact complexity definition.</span>
+                </div>
             </div>
         </div>
 
@@ -288,10 +239,9 @@ window.autofillReqPremise = (selectEl) => {
     row.querySelector('.req-name-input').value = selectedOpt.dataset.name || '';
     row.querySelector('.req-hidden-sector').value = selectedOpt.dataset.sector || '';
 
-    // Auto-extract the floor area number to pre-fill the Target Area box
     let sqm = parseFloat((selectedOpt.dataset.floor || '').replace(/[^\d.]/g, ''));
     if ((selectedOpt.dataset.floor || '').toLowerCase().includes('ha')) sqm = sqm * 10000;
-    if (!isNaN(sqm)) row.querySelector('.req-floor-area-input').value = sqm; // Maps to floor area safely
+    if (!isNaN(sqm)) row.querySelector('.req-floor-area-input').value = sqm; 
 
     const fullAddr = selectedOpt.dataset.address || '';
     const parts = fullAddr.split(',').map(s => s.trim());
@@ -313,7 +263,6 @@ window.autofillReqPremise = (selectEl) => {
     window.calculateRowEstimate(row);
 };
 
-// HELPER: Convert decimal hours (e.g. 1.8) into human-readable time (e.g. 1h 48min)
 window.formatTimeReadable = (decimalHours) => {
     const totalMinutes = Math.round(decimalHours * 60);
     const hrs = Math.floor(totalMinutes / 60);
@@ -327,37 +276,23 @@ window.formatTimeReadable = (decimalHours) => {
 
 // Master Granular, DB-Driven Hybrid Routing Engine
 window.calculateRowEstimate = async (row) => {
-    // 1. SECURE DB LOOKUPS
     const getVal = (key) => {
         if (!state.pricingRules) return 0; 
         const rule = state.pricingRules.find(r => r.rule_key === key);
         return rule ? Number(rule.value) : 0;
     };
 
-    // Pull ALL Base & Constraint Rules directly from Supabase
     const HOURLY_RATE = getVal('rate_hourly') || 350;
-    const INSP_BASE_HRS = getVal('insp_base_hrs') || 2.0;
-    const REPORT_DRAFT_HRS = getVal('report_draft_hrs') || 8.0;   
-    const REPORT_REVIEW_HRS = getVal('report_review_hrs') || 2.0; 
-    
-    // The New Dynamic Limits & Buffers
-    const RENTAL_ADMIN_HRS = getVal('rental_admin_hrs') || 0.33; 
-    const MIN_TRAVEL_HRS = getVal('travel_min_hrs') || 0.5;
     const MAX_TRAVEL_HRS = getVal('travel_max_hrs') || 8.0;
-    const MIN_REPORT_HRS = getVal('report_min_hrs') || 10.0;
-    
-    // Inflation Adjustment
+    const RENTAL_ADMIN_HRS = getVal('rental_admin_hrs') || 0.33; 
     const CPI_MULTIPLIER = getVal('cpi_multiplier') || 1.00;
 
-    // --- DYNAMIC OFFICE LOOKUP ---
     const currentDate = new Date();
     const openOffices = (state.officesData || []).filter(office => currentDate >= new Date(office.open_date));
 
     const typeSelect = row.querySelector('.req-type-select');
     const siteAreaStr = row.querySelector('.req-site-area-input').value;
     const floorAreaStr = row.querySelector('.req-floor-area-input').value;
-    const levelSelect = row.querySelector('.req-levels-select');
-    const numFloors = parseInt(levelSelect.options[levelSelect.selectedIndex].getAttribute('data-floors')) || 1;
     
     const deadlineStr = row.querySelector('.req-deadline-input').value;
     const addressStr = row.querySelector('.req-address-input').value.trim();
@@ -380,18 +315,17 @@ window.calculateRowEstimate = async (row) => {
         return;
     }
     
-    breakdownEl.innerText = "Calculating AI routing & precise timing...";
+    breakdownEl.innerText = "Calculating precise routing & timing...";
 
-    // 2. SMART AREA CALCULATION (3-Level Sampling Rule)
-    const hasYard = siteArea > floorArea;
-    let calcArea = Math.max(siteArea, floorArea); 
-    
-    if (numFloors > 3 && floorArea > 0) {
-        const areaPerFloor = floorArea / numFloors;
-        const sampledFloorArea = areaPerFloor * 3;
-        calcArea = hasYard ? (siteArea + sampledFloorArea) : sampledFloorArea;
-    } else if (numFloors > 1 && floorArea > 0) {
-        calcArea = hasYard ? (siteArea + floorArea) : floorArea; 
+    // 2. SMART AREA CALCULATION
+    let calcArea = 0;
+    if (siteArea >= floorArea) {
+        calcArea = siteArea;
+    } else {
+        // Multi-story logic: Take site area (for ground floor footprint) 
+        // then take the floor area for the rest (upper levels).
+        // Adding them ensures the full walkable footprint of the site and the upper floors are accounted for.
+        calcArea = siteArea + floorArea;
     }
     hiddenAreaEl.value = calcArea;
 
@@ -401,13 +335,13 @@ window.calculateRowEstimate = async (row) => {
     if (deadlineStr) {
         const diffDays = Math.ceil((new Date(deadlineStr) - new Date()) / (1000 * 60 * 60 * 24));
         if (diffDays <= 10) {
-            speedHrs = getVal('rush_fee_hrs'); 
+            speedHrs = getVal('rush_fee_hrs') || 4; 
             speedText = "Rush / Urgent";
         }
     }
 
     // 4. MULTI-OFFICE HYBRID ROUTING ENGINE
-    let travelHrs = parseFloat(row.dataset.cachedTravel) || MIN_TRAVEL_HRS;
+    let travelHrs = parseFloat(row.dataset.cachedTravel) || 0;
     let travelText = row.dataset.cachedTravelText || "Pending Route";
     const fullAddr = `${addressStr}, ${regionStr}, ${countryStr}`;
     
@@ -437,10 +371,9 @@ window.calculateRowEstimate = async (row) => {
                             const localDriveJson = await localDriveRes.json();
                             
                             const localDriveHrs = (localDriveJson.routes && localDriveJson.routes.length > 0) 
-                                ? (localDriveJson.routes[0].duration / 3600) : MIN_TRAVEL_HRS;
+                                ? (localDriveJson.routes[0].duration / 3600) : 0.5;
 
                             const flightHrs = flightMins / 60;
-                            
                             const oneWayFlightTripHrs = Number(homeOffice.apt_drive_hrs) + flightHrs + RENTAL_ADMIN_HRS + localDriveHrs;
                             
                             if (oneWayFlightTripHrs < oneWayDriveHrs) {
@@ -459,16 +392,14 @@ window.calculateRowEstimate = async (row) => {
                         travelText = `Drive from ${homeOffice.name}`;
                     }
                     
-                    // Enforce DB-driven limits
-                    travelHrs = Math.max(MIN_TRAVEL_HRS, Math.min(MAX_TRAVEL_HRS, travelHrs)); 
-                    
-                    // THE FIX: Stop rounding "up". Just strictly map to 1 decimal place.
+                    // Travel time is mathematically precise, no minimum floor used.
+                    travelHrs = Math.min(MAX_TRAVEL_HRS, travelHrs); 
                     travelHrs = Math.round(travelHrs * 10) / 10; 
                 }
             }
         } catch(e) { 
             console.log("Routing failed.", e); 
-            travelHrs = MIN_TRAVEL_HRS; 
+            travelHrs = 1.0; 
         }
         row.dataset.cachedTravel = travelHrs;
         row.dataset.cachedTravelText = travelText;
@@ -476,34 +407,64 @@ window.calculateRowEstimate = async (row) => {
         travelText = row.dataset.cachedTravelText;
     }
 
-    // 5. INSPECTION MODIFIERS
-    let tierIndex = Math.ceil(calcArea / 500);
-    if (tierIndex < 1) tierIndex = 1;
-    if (tierIndex > 15) tierIndex = 15; 
+    // 5. MATRIX-DRIVEN INSPECTION & REPORT ENGINE
+    let matrixInspHrs = 0;
+    let matrixRepHrs = 0;
     
-    let areaHrs = getVal(`area_tier_${tierIndex}`);
+    let sector = 'Special Purpose';
+    const bldgTypeVal = row.querySelector('.req-bldg-type-select').value;
+    if (bldgTypeVal === 'type_industrial') sector = 'Industrial';
+    else if (bldgTypeVal === 'type_office') sector = 'Office';
+    else if (bldgTypeVal === 'type_retail') sector = 'Retail';
 
-    const typeHrs = getVal(row.querySelector('.req-bldg-type-select').value);
-    const renoHrs = getVal(row.querySelector('.req-reno-select').value); 
-    const occHrs = getVal(row.querySelector('.req-occ-select').value);
-    const docHrs = getVal(row.querySelector('.req-docs-select').value);
-    
-    let inspectionHrs = INSP_BASE_HRS + areaHrs + typeHrs + renoHrs + occHrs + docHrs;
-    
-    // THE FIX: Cleanly round internal inspection math to 1 decimal
+    const compVal = row.querySelector('.req-complexity-select').value; // 'simple', 'standard', 'complex'
+    const descSpan = row.querySelector('.complexity-span-text');
+
+    // UNBREAKABLE FALLBACK MATRIX
+    const fallbackMatrix = [
+        { sector: 'Office', size_category: 'Small Suite', min_sqm: 0, max_sqm: 500, simple_def: 'Open plan, standard lighting & HVAC, no complex tenant fit-out.', simple_insp_hrs: 2, simple_rep_hrs: 3, standard_def: 'Enclosed meeting rooms, kitchenette, standard partitioned office services.', standard_insp_hrs: 3, standard_rep_hrs: 4, complex_def: 'High-density layout, specialized comms/server room, or medical/consulting use.', complex_insp_hrs: 4, complex_rep_hrs: 5 },
+        { sector: 'Office', size_category: 'Medium (1–2 Floors)', min_sqm: 500, max_sqm: 2000, simple_def: 'Mostly open plan, uniform services across the floor, basic amenities.', simple_insp_hrs: 4, simple_rep_hrs: 5, standard_def: 'Mix of open plan and enclosed offices, standard staff amenities and typical HVAC zones.', standard_insp_hrs: 6, standard_rep_hrs: 7, complex_def: 'Inter-tenancy stairs, heavy IT infrastructure, high-spec cafeteria, or end-of-trip facilities.', complex_insp_hrs: 6, complex_rep_hrs: 8 },
+        { sector: 'Office', size_category: 'Large (Multi-Floor)', min_sqm: 2000, max_sqm: 5000, simple_def: 'Warm-shell condition, ready for tenant fit-out, basic base-building MEP.', simple_insp_hrs: 6, simple_rep_hrs: 8, standard_def: 'Typical corporate fit-out over multiple floors, standard HVAC zoning and security.', standard_insp_hrs: 8, standard_rep_hrs: 12, complex_def: 'High-security zones, auditoriums, specialized HVAC, or backup generators.', complex_insp_hrs: 10, complex_rep_hrs: 16 },
+        { sector: 'Office', size_category: 'Major / Tower Scale', min_sqm: 5000, max_sqm: null, simple_def: 'Base-build condition, uniform open floorplates, basic central plant.', simple_insp_hrs: 8, simple_rep_hrs: 12, standard_def: 'Standard multi-tenant corporate tower, typical central plant and lift services.', standard_insp_hrs: 12, standard_rep_hrs: 20, complex_def: 'Premium/A-grade complex fit-outs, heavy integrated tech, multiple central plant rooms.', complex_insp_hrs: 16, complex_rep_hrs: 24 },
+        { sector: 'Industrial', size_category: 'Small Unit', min_sqm: 0, max_sqm: 500, simple_def: 'Basic shell, no specialized plant, dry storage, minimal office space.', simple_insp_hrs: 2, simple_rep_hrs: 3, standard_def: 'Small office/amenity block attached, 3-phase power, light trade use.', standard_insp_hrs: 3, standard_rep_hrs: 4, complex_def: 'Food-grade prep area, small cool room, or heavy extraction systems.', complex_insp_hrs: 4, complex_rep_hrs: 5 },
+        { sector: 'Industrial', size_category: 'Medium Warehouse', min_sqm: 500, max_sqm: 2000, simple_def: 'Open warehouse, minimal office ratio, basic lighting and ventilation.', simple_insp_hrs: 3, simple_rep_hrs: 4, standard_def: 'Standard manufacturing/logistics, partial mezzanine, typical MEP.', standard_insp_hrs: 4, standard_rep_hrs: 6, complex_def: 'Specialized manufacturing, gantry cranes, dangerous goods (DG) storage.', complex_insp_hrs: 6, complex_rep_hrs: 8 },
+        { sector: 'Industrial', size_category: 'Large Standalone', min_sqm: 2000, max_sqm: 5000, simple_def: 'Bulk dry storage, simple portal frame, low MEP needs.', simple_insp_hrs: 4, simple_rep_hrs: 6, standard_def: 'Logistics hub, moderate racking, standard office and yard component.', standard_insp_hrs: 6, standard_rep_hrs: 8, complex_def: 'Cold storage, heavy manufacturing plant, complex environmental controls.', complex_insp_hrs: 8, complex_rep_hrs: 12 },
+        { sector: 'Industrial', size_category: 'Very Large / Bulk', min_sqm: 5000, max_sqm: 10000, simple_def: 'Open bulk warehouse, minimal compartmentalization or specialized zones.', simple_insp_hrs: 6, simple_rep_hrs: 8, standard_def: 'Standard distribution center, multiple loading docks, standard plant.', standard_insp_hrs: 8, standard_rep_hrs: 12, complex_def: 'Extensive temperature-controlled zones, automated sorting systems.', complex_insp_hrs: 12, complex_rep_hrs: 16 },
+        { sector: 'Industrial', size_category: 'Mega / DC Scale', min_sqm: 10000, max_sqm: null, simple_def: 'Huge open dry-goods storage, minimal complex operational zones.', simple_insp_hrs: 8, simple_rep_hrs: 12, standard_def: 'Standard FMCG logistics, extensive but standard dock leveling and racking.', standard_insp_hrs: 12, standard_rep_hrs: 16, complex_def: 'High-tech ASRS (Automated Storage), massive refrigeration plant, heavy industrial processes.', complex_insp_hrs: 16, complex_rep_hrs: 24 },
+        { sector: 'Retail', size_category: 'Small Shop / High-St', min_sqm: 0, max_sqm: 500, simple_def: 'Basic retail shell, no food prep, standard HVAC, single tenant.', simple_insp_hrs: 2, simple_rep_hrs: 3, standard_def: 'Cafe/light F&B with standard extraction, grease trap, and basic kitchen.', standard_insp_hrs: 3, standard_rep_hrs: 5, complex_def: 'Full commercial kitchen, intensive MEP, or pharmacy/medical use.', complex_insp_hrs: 4, complex_rep_hrs: 6 },
+        { sector: 'Retail', size_category: 'Medium / Metro Supermarket', min_sqm: 500, max_sqm: 2500, simple_def: 'Open format retail (e.g., clothing/homeware), basic services.', simple_insp_hrs: 3, simple_rep_hrs: 5, standard_def: 'Convenience supermarket, basic deli/bakery, small display fridges.', standard_insp_hrs: 5, standard_rep_hrs: 8, complex_def: 'High-spec food market, extensive refrigeration, intensive lighting/HVAC.', complex_insp_hrs: 7, complex_rep_hrs: 10 },
+        { sector: 'Retail', size_category: 'Large / Full-Line Supermarket', min_sqm: 2500, max_sqm: 5000, simple_def: 'Large format dry retail (e.g., furniture), uniform open space.', simple_insp_hrs: 4, simple_rep_hrs: 6, standard_def: 'Standard supermarket layout, moderate plant requirements, standard BOH.', standard_insp_hrs: 8, standard_rep_hrs: 12, complex_def: 'Full-service supermarket (butchery, bakery, massive CO₂ plant, heavy extraction).', complex_insp_hrs: 12, complex_rep_hrs: 18 },
+        { sector: 'Retail', size_category: 'Big-Box / LFR Centre', min_sqm: 5000, max_sqm: 15000, simple_def: 'Basic big-box shell (e.g., hardware), minimal partitions, open plan.', simple_insp_hrs: 6, simple_rep_hrs: 8, standard_def: 'LFR centre with multiple standard tenancies, typical amenities.', standard_insp_hrs: 10, standard_rep_hrs: 14, complex_def: 'Mix of LFR and heavy F&B, complex roof plant, highly specialized tenancies.', complex_insp_hrs: 14, complex_rep_hrs: 20 },
+        { sector: 'Retail', size_category: 'Regional Mall', min_sqm: 15000, max_sqm: null, simple_def: '(Rarely simple) Open concourses, basic retail shells, uniform systems.', simple_insp_hrs: 10, simple_rep_hrs: 14, standard_def: 'Standard mall, mix of fashion/services, standard food court and plant.', standard_insp_hrs: 16, standard_rep_hrs: 24, complex_def: 'Major food courts, cinemas, medical centres, massive centralized plant.', complex_insp_hrs: 24, complex_rep_hrs: 40 }
+    ];
+
+    const matrixData = (state.estimationMatrix && state.estimationMatrix.length > 0) ? state.estimationMatrix : fallbackMatrix;
+
+    const match = matrixData.find(m => {
+        const min = Number(m.min_sqm) || 0;
+        const max = m.max_sqm !== null ? Number(m.max_sqm) : Infinity;
+        return m.sector === sector && calcArea >= min && calcArea < max;
+    });
+
+    if (match) {
+        if (descSpan) {
+            descSpan.innerHTML = `<strong>${compVal.charAt(0).toUpperCase() + compVal.slice(1)}:</strong> ${match[`${compVal}_def`]}`;
+        }
+        matrixInspHrs = Number(match[`${compVal}_insp_hrs`]) || 0;
+        matrixRepHrs = Number(match[`${compVal}_rep_hrs`]) || 0;
+        row.dataset.sizeCategory = match.size_category;
+    } else {
+        if (descSpan) descSpan.innerHTML = '<strong>Special Purpose:</strong> Area is outside standard modeling. Fallback estimates apply.';
+        row.dataset.sizeCategory = 'Special Purpose / Custom Scale';
+    }
+
+    const reportTypeHrs = getVal(typeSelect.value ? `rep_${typeSelect.value}` : null) || 0;
+
+    let inspectionHrs = matrixInspHrs > 0 ? matrixInspHrs : 2.0;
     inspectionHrs = Math.round(inspectionHrs * 10) / 10; 
 
-    // 6. REPORT MODIFIERS 
-    const reportTypeKey = typeSelect.value ? `rep_${typeSelect.value}` : null;
-    const reportTypeHrs = getVal(reportTypeKey);
-    const regHrs = getVal(row.querySelector('.req-reg-select').value); 
-
-    const finalReviewHrs = REPORT_REVIEW_HRS + regHrs;
-    let reportHrs = REPORT_DRAFT_HRS + finalReviewHrs + reportTypeHrs + speedHrs;
-    
-    reportHrs = Math.max(MIN_REPORT_HRS, reportHrs); 
-    
-    // THE FIX: Cleanly round internal report math to 1 decimal
+    // Pure Report Calculation without minimum floors overriding it
+    let reportHrs = matrixRepHrs > 0 ? (matrixRepHrs + reportTypeHrs + speedHrs) : (8.0 + reportTypeHrs + speedHrs);
     reportHrs = Math.round(reportHrs * 10) / 10; 
 
     // 7. TOTAL CALCULATION
@@ -515,22 +476,23 @@ window.calculateRowEstimate = async (row) => {
     const clientId = state.currentUser?.clientSpoof?.id || state.currentUser?.id;
     const vipStats = window.getClientVipTier(clientId);
     
-    // Apply discount
     const discountAmount = inflatedFee * vipStats.discount;
     const finalFee = Math.round(inflatedFee - discountAmount);
 
-    // Build visual discount tag (Professional, non-gimmicky)
-    const discountTag = vipStats.discount > 0 
-        ? `<div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: #00264b; background: #f8fafc; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 12px; letter-spacing: 0.5px; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+    let discountTag = '';
+    if (vipStats.discount > 0) {
+        discountTag = `<div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: #00264b; background: #f8fafc; border: 1px solid #cbd5e1; padding: 4px 10px; border-radius: 12px; letter-spacing: 0.5px; text-transform: uppercase; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg>
             ${vipStats.discount * 100}% ${vipStats.tier.split(' ')[0]} Discount Applied
-           </div><br>` 
-        : '<br>';
+           </div><br>`;
+    } else {
+        discountTag = `<div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: #64748b; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 12px; letter-spacing: 0.5px; text-transform: uppercase;">
+            Standard Rate (No VIP Discount)
+           </div><br>`;
+    }
 
-    // --- NEXT TIER UPSELL TRACKER ---
     let nextTierUpsell = '';
     if (state.discountsData && state.discountsData.length > 0) {
-        // Sort ascending to find the very next tier they HAVEN'T reached yet
         const ascendingTiers = [...state.discountsData].sort((a, b) => Number(a.min_revenue) - Number(b.min_revenue));
         const nextTier = ascendingTiers.find(t => Number(t.min_revenue) > vipStats.revenue);
 
@@ -545,18 +507,16 @@ window.calculateRowEstimate = async (row) => {
         }
     }
 
-    // Pass the decimals through the formatter for the UI
-    breakdownEl.innerHTML = `Travel: ${window.formatTimeReadable(travelHrs)} &nbsp;|&nbsp; Insp: ${window.formatTimeReadable(inspectionHrs)} &nbsp;|&nbsp; Report: ${window.formatTimeReadable(reportHrs)} ${discountTag} ${nextTierUpsell}`;
+    breakdownEl.innerHTML = `Travel: ${window.formatTimeReadable(travelHrs)} &nbsp;|&nbsp; Insp: ${window.formatTimeReadable(inspectionHrs)} &nbsp;|&nbsp; Report: ${window.formatTimeReadable(reportHrs)} <br>${discountTag} ${nextTierUpsell}`;
     
     totalEl.innerText = `$${finalFee.toLocaleString()}`;
     totalEl.style.color = "#0284c7"; 
     hiddenCostEl.value = finalFee; 
     
-    // Save raw data to dataset
     row.dataset.breakdownInsp = inspectionHrs.toFixed(1);
     row.dataset.breakdownRep = reportHrs.toFixed(1);
     row.dataset.breakdownTrav = travelHrs.toFixed(1);
-    row.dataset.discountApplied = vipStats.discount; // Save to push to WFM notes
+    row.dataset.discountApplied = vipStats.discount; 
 };
 
 window.openRequestModal = async () => {
@@ -589,7 +549,6 @@ window.closeRequestModal = () => {
     document.getElementById('requestModalOverlay').classList.remove('active');
     document.getElementById('requestReportForm').reset();
     
-    // Completely clear the dynamic rows and reset it back to one empty card
     document.getElementById('reqPremisesContainer').innerHTML = '';
     window.addPremiseRow();
 };
@@ -648,30 +607,21 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
             const planInput = row.querySelector('.req-plan-file');
             const fullAddress = `${addressLine}, ${region}, ${country}`;
 
-            // Pull AI-Calculated variables
             const travelText = row.dataset.cachedTravelText || "Pending/Local";
             const deadlineDate = new Date(deadline);
             const isRush = Math.ceil((deadlineDate - new Date()) / (1000 * 60 * 60 * 24)) <= 10;
             const speedText = isRush ? 'Urgent / Rush (<10 Days)' : 'Standard';
 
-            // Build human-readable breakdown for the WFM Lead
             const bldgType = row.querySelector('.req-bldg-type-select').selectedOptions[0].text;
-            const bldgLevels = row.querySelector('.req-levels-select').selectedOptions[0].text;
-            const bldgRenos = row.querySelector('.req-reno-select').selectedOptions[0].text;
-            const siteOcc = row.querySelector('.req-occ-select').selectedOptions[0].text;
-            const siteDocs = row.querySelector('.req-docs-select').selectedOptions[0].text;
-            const regContext = row.querySelector('.req-reg-select').selectedOptions[0].text;
+            const complexityText = row.querySelector('.req-complexity-select').selectedOptions[0].text;
             
-            // Re-parse the saved dataset math
+            const sizeCategory = row.dataset.sizeCategory || "Special Purpose / Custom";
+            
             const trvH = parseFloat(row.dataset.breakdownTrav || '0.5');
             const inspH = parseFloat(row.dataset.breakdownInsp || '2.0');
             const repH = parseFloat(row.dataset.breakdownRep || '10.0');
             const totalH = trvH + inspH + repH;
 
-            const numFloors = parseInt(row.querySelector('.req-levels-select').options[row.querySelector('.req-levels-select').selectedIndex].getAttribute('data-floors')) || 1;
-            const samplingNote = numFloors > 3 ? `(Sampled exactly 3 floors of ${numFloors})` : "(Standard Footprint)";
-
-            // Build the string using the formatTimeReadable helper!
             const complexityBreakdown = `
 --- HOURS & COMPLEXITY PROFILE ---
 Calculated Time: ${window.formatTimeReadable(totalH)} Total
@@ -680,10 +630,10 @@ Calculated Time: ${window.formatTimeReadable(totalH)} Total
 • Reporting: ${window.formatTimeReadable(repH)} (Drafting, Peer Review & Uploads)
 
 Areas: Site ${siteArea.toLocaleString()} sqm | Floor ${floorArea.toLocaleString()} sqm
-Calc Base: ${calcArea.toFixed(0).toLocaleString()} sqm ${samplingNote}
-Context: ${regContext} | Turnaround: ${speedText}
-Building: ${bldgType} | ${bldgLevels} | ${bldgRenos}
-Site Status: ${siteOcc} | ${siteDocs}
+Scale: ${sizeCategory}
+Calc Base: ${calcArea.toFixed(0).toLocaleString()} sqm
+Turnaround: ${speedText}
+Building Profile: ${bldgType} | Complexity: ${complexityText}
 ----------------------------------
 `.trim();
 
@@ -730,19 +680,16 @@ Site Status: ${siteOcc} | ${siteDocs}
 
         if (inserts.length === 0) throw new Error("Please provide details for at least one premise.");
 
-        // Save all rows to the database instantly
         btn.innerText = 'Saving to Database...';
         const { error: insertError } = await supabase.from('report_requests').insert(inserts);
         if (insertError) throw insertError;
 
-        // Notify via Email
         btn.innerText = 'Notifying Team...';
         const { error: emailError } = await supabase.functions.invoke('send-request-email', {
             body: { requests: inserts }
         });
         if (emailError) console.error("Email warning:", emailError);
 
-        // Silently push all requests straight into WorkflowMax
         btn.innerText = 'Generating WFM Quotes...';
         let wfmSuccessCount = 0;
         for (const payload of wfmPayloads) {
@@ -797,10 +744,8 @@ document.getElementById('addContactForm')?.addEventListener('submit', async (e) 
         const { data, error } = await supabase.from('contacts').insert([newContact]).select().single();
         if (error) throw error;
 
-        // Add the new contact to the dropdown instantly
         const contactSelect = document.getElementById('reqContactId');
         
-        // Clear the "No contacts found" dummy option if it exists
         if (contactSelect.options[0] && contactSelect.options[0].value === "") {
             contactSelect.innerHTML = '<option value="" disabled>Select Property Manager...</option>';
         }
@@ -808,7 +753,6 @@ document.getElementById('addContactForm')?.addEventListener('submit', async (e) 
         const newOptionHtml = `<option value="${data.id}" data-name="${data.first_name} ${data.last_name}" data-email="${data.email}">${data.first_name} ${data.last_name} (${data.email})</option>`;
         contactSelect.insertAdjacentHTML('beforeend', newOptionHtml);
         
-        // Auto-select the newly created contact
         contactSelect.value = data.id;
 
         window.closeAddContactModal();
@@ -1069,7 +1013,7 @@ document.getElementById('createPremiseForm')?.addEventListener('submit', async (
             lat: lat,
             lng: lng,
             sector: document.getElementById('newPremiseSector').value || null,
-            legal_description: document.getElementById('newPremiseLegal').value.trim() || null, // <-- NEW LINE
+            legal_description: document.getElementById('newPremiseLegal').value.trim() || null,
             floor_area: document.getElementById('newPremiseFloor').value.trim() || null,
             site_area: document.getElementById('newPremiseSite').value.trim() || null,
             year_built: parseInt(document.getElementById('newPremiseYear').value) || null
@@ -1103,7 +1047,6 @@ window.openEditContactModal = (id) => {
     
     state.currentEditContactId = contact.id;
 
-    // Populate Fields
     document.getElementById('editContFirst').value = contact.first_name || '';
     document.getElementById('editContLast').value = contact.last_name || '';
     document.getElementById('editContEmail').value = contact.email || '';
@@ -1111,7 +1054,6 @@ window.openEditContactModal = (id) => {
     document.getElementById('editContPosition').value = contact.position || '';
     document.getElementById('editContLinkedin').value = contact.linkedin || '';
     
-    // Reset Image Preview
     document.getElementById('editContImage').value = '';
     document.getElementById('editContImageName').innerText = '';
     const imgEl = document.getElementById('editContImgElement');
@@ -1130,7 +1072,6 @@ window.openEditContactModal = (id) => {
     const modal = document.getElementById('editContactModalOverlay');
     modal.classList.add('active');
     
-    // Force focus onto the modal body so it's ready to catch Ctrl+V immediately
     setTimeout(() => document.getElementById('editContactBody').focus(), 100);
 };
 
@@ -1140,30 +1081,25 @@ window.closeEditContactModal = () => {
     state.currentEditContactId = null;
 };
 
-// 🖼️ THE MAGIC PASTE LISTENER
 document.getElementById('editContactBody')?.addEventListener('paste', (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
     for (let item of items) {
         if (item.type.indexOf('image') !== -1) {
-            // Convert clipboard item into a real File
             const file = item.getAsFile();
             const dt = new DataTransfer();
             dt.items.add(file);
             
-            // Attach it to the hidden HTML input
             const input = document.getElementById('editContImage');
             input.files = dt.files;
             
-            // Trigger the visual preview
             window.previewContactImage(input);
             break; 
         }
     }
 });
 
-// Image Preview Handler
 window.previewContactImage = (input) => {
     const displayEl = document.getElementById('editContImageName');
     const imgEl = document.getElementById('editContImgElement');
@@ -1183,7 +1119,6 @@ window.previewContactImage = (input) => {
     }
 };
 
-// Save Updates
 document.getElementById('editContactForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('submitEditContactBtn');
@@ -1195,10 +1130,8 @@ document.getElementById('editContactForm')?.addEventListener('submit', async (e)
         const contact = state.contactsData.find(c => String(c.id) === String(state.currentEditContactId));
         let profileUrl = contact.profile_image_url;
 
-        // If a new image was uploaded OR PASTED
         if (document.getElementById('editContImage').files.length > 0) {
             btn.innerText = 'Uploading Photo...';
-            // We use the existing upload logic, dropping it into our new bucket
             const urls = await uploadMultipleFiles(document.getElementById('editContImage'), 'contact_profiles', '', `cont_${contact.id}_`);
             if (urls && urls.length > 0) profileUrl = urls[0];
         }
@@ -1231,20 +1164,17 @@ document.getElementById('editContactForm')?.addEventListener('submit', async (e)
 
 // --- CREATE ADMIN CONTACT MODAL & PASTE LOGIC ---
 window.openCreateAdminContactModal = () => {
-    // Populate clients dropdown alphabetically
     const clientSelect = document.getElementById('createContClient');
     clientSelect.innerHTML = '<option value="" disabled selected>Select a Client...</option>' + 
         [...state.clientsData].sort((a,b)=>a.name.localeCompare(b.name)).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
         
     document.getElementById('createAdminContactModalOverlay').classList.add('active');
     
-    // Reset visual preview
     document.getElementById('createContImgElement').style.display = 'none';
     document.getElementById('createContInitials').style.display = 'flex';
     document.getElementById('createContInitials').innerText = '?';
     document.getElementById('createContImageName').innerText = '';
     
-    // Force focus so Ctrl+V works immediately
     setTimeout(() => document.getElementById('createAdminContactBody').focus(), 100);
 };
 
@@ -1253,7 +1183,6 @@ window.closeCreateAdminContactModal = () => {
     document.getElementById('createAdminContactForm').reset();
 };
 
-// 🖼️ MAGIC PASTE LISTENER FOR NEW CONTACTS
 document.getElementById('createAdminContactBody')?.addEventListener('paste', (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
@@ -1272,7 +1201,6 @@ document.getElementById('createAdminContactBody')?.addEventListener('paste', (e)
     }
 });
 
-// Image Preview Handler
 window.previewNewContactImage = (input) => {
     const displayEl = document.getElementById('createContImageName');
     const imgEl = document.getElementById('createContImgElement');
@@ -1292,7 +1220,6 @@ window.previewNewContactImage = (input) => {
     }
 };
 
-// Save New Contact
 document.getElementById('createAdminContactForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('submitCreateAdminContactBtn');
@@ -1306,7 +1233,6 @@ document.getElementById('createAdminContactForm')?.addEventListener('submit', as
         
         if (!clientId) throw new Error("Please select a Client Company.");
 
-        // If a new image was uploaded OR PASTED
         if (document.getElementById('createContImage').files.length > 0) {
             btn.innerText = 'Uploading Photo...';
             const uniquePrefix = `cont_new_${Date.now()}_`;
