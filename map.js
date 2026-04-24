@@ -462,6 +462,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
             const btnWFMConnect = createMenuBtn("Connect WFM", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00264b" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`);
             const btnXeroConnect = createMenuBtn("Connect Xero", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/><path d="M9.5 9.5l5 5m0-5l-5 5"/></svg>`);
             const btnXeroSync = createMenuBtn("Sync Budgets (Xero)", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`);
+            const btnXeroLink = createMenuBtn("Link Xero Clients", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`);
             const btnWFMJobs = createMenuBtn("Sync Jobs & Map", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00264b" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`);
             const btnSyncLogos = createMenuBtn("Sync Client Logos", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00264b" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`);
             const btnFix = createMenuBtn("Fix Missing Coordinates", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00264b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>`);
@@ -471,7 +472,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
             const btnWFMClientSync = createMenuBtn("Sync Missing Clients (WFM)", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00264b" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`);
             const btnMergeTool = createMenuBtn("Manual Client Merge", `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00264b" stroke-width="2"><path d="M16 3h5v5M8 21H3v-5M21 3l-7 7M3 21l7-7M15 14l6 6M9 10L3 4"></path></svg>`);
             
-            menuContainer.append(btnWFMConnect, btnXeroConnect, btnXeroSync, btnWFMJobs, btnWFMClientSync, btnMergeTool, document.createElement('hr'), btnSyncLogos, btnFix, btnAutoPremise, btnCleanPremises, btnSharePoint);
+            menuContainer.append(btnWFMConnect, btnXeroConnect, btnXeroSync, btnXeroLink, btnWFMJobs, btnWFMClientSync, btnMergeTool, document.createElement('hr'), btnSyncLogos, btnFix, btnAutoPremise, btnCleanPremises, btnSharePoint);
 
             const statusBox = document.createElement('div');
             statusBox.className = 'auto-fix-status';
@@ -508,30 +509,9 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
 
             btnXeroConnect.onclick = () => window.connectXero();
 
-            btnXeroSync.onclick = async () => runTool("Syncing Xero Budgets...", async () => {
-                let totalProcessed = 0; 
-                let hasMore = true; 
-                let batches = 0;
-                let currentCursor = null; 
+            btnXeroLink.onclick = () => window.openXeroMapping();
 
-                while (hasMore) {
-                    statusBox.innerText = `Querying Xero batch ${batches + 1}... (${totalProcessed} updated)`;
-                    
-                    const { data, error } = await supabase.functions.invoke('xero-budget-sync', { 
-                        body: { lastId: currentCursor } 
-                    });
-                    
-                    if (error) throw error; 
-                    if (data && data.error) throw new Error(data.error);
-                    
-                    totalProcessed += (data.processed || 0); 
-                    currentCursor = data.nextId;
-                    hasMore = data.hasMore; 
-                    batches++;
-                }
-                
-                return `Xero Sync Complete! Updated budgets for ${totalProcessed} reports.`;
-            }, btnXeroSync.innerHTML, btnXeroSync);
+            btnXeroSync.onclick = () => window.openTargetedXeroSync();
             
             btnWFMJobs.onclick = async () => {
                 const choice = prompt("Which jobs would you like to sync?\n\nType 'active' for current jobs only (Fast).\nType 'full' to include all historical jobs (Slow).", "active");
