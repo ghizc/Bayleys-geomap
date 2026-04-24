@@ -9,6 +9,7 @@ export const state = {
     contactsData: [],
     reportRequestsData: [],
     pricingRules: [],
+    estimationMatrix: [],
     airportsData: [],
     officesData: [],
     discountsData: [], 
