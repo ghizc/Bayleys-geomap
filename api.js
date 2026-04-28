@@ -181,3 +181,62 @@ export async function getEstimationMatrix() {
     
     return data || [];
 }
+
+// ==========================================
+// SMART PWA INSTALLATION LOGIC
+// ==========================================
+window.addEventListener('DOMContentLoaded', () => {
+    const installPrompt = document.getElementById('pwaInstallPrompt');
+    const installBtn = document.getElementById('pwaInstallBtn');
+    const installText = document.getElementById('pwaInstallText');
+    let deferredPrompt = null;
+
+    // 1. Check if the app is already installed/running in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone || document.referrer.includes('android-app://');
+    if (isStandalone) {
+        return; // They already have the app, do nothing.
+    }
+
+    // 2. Detect Apple/iOS Devices
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+    if (isIOS) {
+        // Apple forces manual installation. We show them how.
+        installText.innerHTML = `Tap the <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align: middle; margin: 0 2px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg> <b>Share</b> button below, then select <br><b>"Add to Home Screen"</b>.`;
+        
+        // Only show this once per session so it doesn't annoy them
+        if (!sessionStorage.getItem('iosPromptShown')) {
+            setTimeout(() => {
+                if (installPrompt) installPrompt.style.display = 'flex';
+                sessionStorage.setItem('iosPromptShown', 'true');
+            }, 2000); // Wait 2 seconds after page loads
+        }
+    }
+
+    // 3. Detect Android/Chrome Devices (Catch the native install event)
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent Chrome's default mini-infobar from appearing
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        deferredPrompt = e;
+        
+        // Update UI to show our custom Install button
+        if (installPrompt) installPrompt.style.display = 'flex';
+        if (installBtn) installBtn.style.display = 'block';
+
+        if (installBtn) {
+            installBtn.addEventListener('click', async () => {
+                // Hide the custom banner
+                installPrompt.style.display = 'none';
+                // Show the native Android install prompt
+                deferredPrompt.prompt();
+                // Wait for the user to respond to the prompt
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    console.log('User accepted the PWA prompt');
+                }
+                deferredPrompt = null;
+            });
+        }
+    });
+});
