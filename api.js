@@ -163,3 +163,21 @@ export async function getDiscounts() {
     if (error) throw error;
     return data || [];
 }
+
+export async function getEstimationMatrix() {
+    const { data, error } = await supabase.from('estimation_matrix').select('*');
+    
+    // If Supabase outright rejects the connection
+    if (error) {
+        alert("SUPABASE CONNECTION ERROR: " + error.message);
+        console.error("Matrix Error:", error);
+        throw error;
+    }
+    
+    // If Supabase connects, but hands back zero rows
+    if (!data || data.length === 0) {
+        alert("SUPABASE WARNING: The app connected to 'estimation_matrix', but it returned ZERO rows. \n\nEither the table is completely empty, or Row Level Security (RLS) is hiding the rows from the public.");
+    }
+    
+    return data || [];
+}
