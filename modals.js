@@ -348,12 +348,8 @@ window.calculateRowEstimate = async (row) => {
     const floorArea = parseFloat(floorAreaStr) || 0;
 
     // 2. FOOTPRINT CALCULATION
-    let calcArea = 0;
-    if (siteArea >= floorArea) {
-        calcArea = siteArea;
-    } else {
-        calcArea = siteArea + floorArea;
-    }
+    // Use whichever is larger: the site area or the floor area
+    const calcArea = Math.max(siteArea, floorArea);
     hiddenAreaEl.value = calcArea;
 
     let sector = 'Special Purpose';
