@@ -8,7 +8,7 @@ let clusterer = null;
 let googleMarkers = [];
 
 // Default map mode
-if (!state.currentMapMode) state.currentMapMode = 'vector3d';
+if (!state.currentMapMode) state.currentMapMode = 'photo3d';
 
 // ==========================================
 // RIGHT-CLICK NAVIGATION OVERRIDE
@@ -135,7 +135,8 @@ export async function initMap(containerId, centerArray, zoom, pitch = 60, bearin
                     },
                     tilt: options.pitch !== undefined ? options.pitch : this.tilt,
                     heading: options.bearing !== undefined ? options.bearing : this.heading,
-                    range: options.zoom ? Math.max(50, 40000 / Math.pow(2, options.zoom - 9)) : this.range 
+                    // Prioritize exact range in meters, fallback to calculating via zoom
+                    range: options.range !== undefined ? options.range : (options.zoom ? Math.max(50, 40000 / Math.pow(2, options.zoom - 9)) : this.range)
                 };
                 this.flyCameraTo({ endCamera, durationMillis: 2000 });
             };
