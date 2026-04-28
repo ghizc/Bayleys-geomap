@@ -81,8 +81,9 @@ window.addPremiseRow = () => {
             const premise = state.premisesData.find(p => p.id === r.premise_id) || {};
             const address = premise.address || '';
             const floor = premise.floor_area || '';
+            const site = premise.site_area || ''; 
             const sector = premise.sector || '';
-            return `<option value="${r.id}" data-name="${r.name}" data-address="${address}" data-floor="${floor}" data-sector="${sector}">${r.name}</option>`;
+            return `<option value="${r.id}" data-name="${r.name}" data-address="${address}" data-floor="${floor}" data-site="${site}" data-sector="${sector}">${r.name}</option>`;
         }).join('');
     }
 
@@ -156,11 +157,11 @@ window.addPremiseRow = () => {
             </div>
             <div class="form-group" style="margin: 0;">
                 <label class="form-label" style="font-size: 11px; color: #0284c7;">Site Area (sqm)</label>
-                <input type="number" class="form-input req-site-area-input" required placeholder="e.g. 1500" oninput="window.calculateRowEstimate(this.closest('.premise-req-row'))" style="height: 44px; box-sizing: border-box; border-color: #bae6fd; background: #f0f9ff;">
+                <input type="number" class="form-input req-site-area-input" placeholder="e.g. 1500" oninput="window.calculateRowEstimate(this.closest('.premise-req-row'))" style="height: 44px; box-sizing: border-box; border-color: #bae6fd; background: #f0f9ff;">
             </div>
             <div class="form-group" style="margin: 0;">
                 <label class="form-label" style="font-size: 11px; color: #0284c7;">Floor Area (sqm)</label>
-                <input type="number" class="form-input req-floor-area-input" required placeholder="e.g. 500" oninput="window.calculateRowEstimate(this.closest('.premise-req-row'))" style="height: 44px; box-sizing: border-box; border-color: #bae6fd; background: #f0f9ff;">
+                <input type="number" class="form-input req-floor-area-input" placeholder="e.g. 500" oninput="window.calculateRowEstimate(this.closest('.premise-req-row'))" style="height: 44px; box-sizing: border-box; border-color: #bae6fd; background: #f0f9ff;">
             </div>
 
             <div class="form-group" style="margin: 0; grid-column: span 2;">
@@ -195,7 +196,7 @@ window.addPremiseRow = () => {
             <div style="grid-column: span 4; margin-top: -8px;">
                  <div class="complexity-desc" style="font-size: 10.5px; color: #0369a1; line-height: 1.4; background: #f0f9ff; padding: 8px 12px; border-radius: 6px; border: 1px solid #bae6fd; display: flex; align-items: flex-start;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right: 8px; flex-shrink: 0; margin-top: 1px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span class="complexity-span-text">Enter area and sector to view your exact complexity definition.</span>
+                    <span class="complexity-span-text">Awaiting Input: Enter areas and sector to view exact complexity definition.</span>
                 </div>
             </div>
         </div>
@@ -231,7 +232,7 @@ window.addPremiseRow = () => {
     container.appendChild(row);
 };
 
-window.autofillReqPremise = (selectEl) => {
+window.autofillReqPremise = async (selectEl) => {
     const selectedOpt = selectEl.options[selectEl.selectedIndex];
     if (!selectedOpt.value) return;
 
@@ -239,25 +240,52 @@ window.autofillReqPremise = (selectEl) => {
     row.querySelector('.req-name-input').value = selectedOpt.dataset.name || '';
     row.querySelector('.req-hidden-sector').value = selectedOpt.dataset.sector || '';
 
-    let sqm = parseFloat((selectedOpt.dataset.floor || '').replace(/[^\d.]/g, ''));
-    if ((selectedOpt.dataset.floor || '').toLowerCase().includes('ha')) sqm = sqm * 10000;
-    if (!isNaN(sqm)) row.querySelector('.req-floor-area-input').value = sqm; 
+    let fSqm = parseFloat((selectedOpt.dataset.floor || '').replace(/[^\d.]/g, ''));
+    if ((selectedOpt.dataset.floor || '').toLowerCase().includes('ha')) fSqm = fSqm * 10000;
+    if (!isNaN(fSqm)) row.querySelector('.req-floor-area-input').value = fSqm; 
+
+    let sSqm = parseFloat((selectedOpt.dataset.site || '').replace(/[^\d.]/g, ''));
+    if ((selectedOpt.dataset.site || '').toLowerCase().includes('ha')) sSqm = sSqm * 10000;
+    if (!isNaN(sSqm)) row.querySelector('.req-site-area-input').value = sSqm;
 
     const fullAddr = selectedOpt.dataset.address || '';
-    const parts = fullAddr.split(',').map(s => s.trim());
+    row.querySelector('.req-address-input').value = fullAddr; 
 
-    if (parts.length >= 3) {
-        const country = parts.pop();
-        const region = parts.pop();
-        row.querySelector('.req-address-input').value = parts.join(', ');
-        row.querySelector('.req-region-input').value = region;
-        
-        const countrySelect = row.querySelector('.req-country-select');
-        if (country.toLowerCase().includes('australia')) countrySelect.value = 'Australia';
-        else countrySelect.value = 'New Zealand';
-    } else {
-        row.querySelector('.req-address-input').value = fullAddr;
-        row.querySelector('.req-region-input').value = '';
+    if (fullAddr) {
+        try {
+            const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullAddr)}.json?access_token=${MAPBOX_TOKEN}&country=nz,au&limit=1`);
+            const json = await res.json();
+            
+            if (json.features && json.features.length > 0) {
+                const feature = json.features[0];
+                const context = feature.context || [];
+                
+                const regionCtx = context.find(c => c.id.startsWith('region'));
+                if (regionCtx) row.querySelector('.req-region-input').value = regionCtx.text;
+
+                const countryCtx = context.find(c => c.id.startsWith('country'));
+                if (countryCtx) {
+                    const cSelect = row.querySelector('.req-country-select');
+                    if (countryCtx.text.toLowerCase().includes('australia')) cSelect.value = 'Australia';
+                    else cSelect.value = 'New Zealand';
+                }
+                
+                const cleanStreet = feature.place_name.split(',').slice(0, 2).join(', ').trim();
+                row.querySelector('.req-address-input').value = cleanStreet;
+            }
+        } catch (e) {
+            console.log("Mapbox autofill parse failed, falling back to string split.", e);
+            const parts = fullAddr.split(',').map(s => s.trim());
+            if (parts.length >= 3) {
+                const country = parts.pop();
+                const region = parts.pop();
+                row.querySelector('.req-address-input').value = parts.join(', ');
+                row.querySelector('.req-region-input').value = region;
+                const cSelect = row.querySelector('.req-country-select');
+                if (country.toLowerCase().includes('australia')) cSelect.value = 'Australia';
+                else cSelect.value = 'New Zealand';
+            }
+        }
     }
 
     window.calculateRowEstimate(row);
@@ -290,9 +318,9 @@ window.calculateRowEstimate = async (row) => {
     const currentDate = new Date();
     const openOffices = (state.officesData || []).filter(office => currentDate >= new Date(office.open_date));
 
-    const typeSelect = row.querySelector('.req-type-select');
-    const siteAreaStr = row.querySelector('.req-site-area-input').value;
-    const floorAreaStr = row.querySelector('.req-floor-area-input').value;
+    const reportTypeVal = row.querySelector('.req-type-select').value;
+    const siteAreaStr = row.querySelector('.req-site-area-input').value.trim();
+    const floorAreaStr = row.querySelector('.req-floor-area-input').value.trim();
     
     const deadlineStr = row.querySelector('.req-deadline-input').value;
     const addressStr = row.querySelector('.req-address-input').value.trim();
@@ -303,45 +331,71 @@ window.calculateRowEstimate = async (row) => {
     const totalEl = row.querySelector('.est-total');
     const hiddenCostEl = row.querySelector('.req-hidden-cost');
     const hiddenAreaEl = row.querySelector('.req-hidden-calc-area');
+    const descSpan = row.querySelector('.complexity-span-text');
 
-    const siteArea = parseFloat(siteAreaStr) || 0;
-    const floorArea = parseFloat(floorAreaStr) || 0;
-
-    if (!typeSelect.value || (siteArea === 0 && floorArea === 0)) {
-        breakdownEl.innerText = "Enter areas & report type to estimate";
+    if (!reportTypeVal || (siteAreaStr === '' && floorAreaStr === '')) {
+        breakdownEl.innerText = "Enter areas and report type to estimate";
         totalEl.innerText = "TBC";
         totalEl.style.color = "#f59e0b";
         hiddenCostEl.value = 0;
+        if (descSpan) descSpan.innerHTML = '<strong>Awaiting Input:</strong> Enter area to view exact complexity definition.';
         return;
     }
     
     breakdownEl.innerText = "Calculating precise routing & timing...";
 
-    // 2. SMART AREA CALCULATION
+    const siteArea = parseFloat(siteAreaStr) || 0;
+    const floorArea = parseFloat(floorAreaStr) || 0;
+
+    // 2. FOOTPRINT CALCULATION
     let calcArea = 0;
     if (siteArea >= floorArea) {
         calcArea = siteArea;
     } else {
-        // Multi-story logic: Take site area (for ground floor footprint) 
-        // then take the floor area for the rest (upper levels).
-        // Adding them ensures the full walkable footprint of the site and the upper floors are accounted for.
         calcArea = siteArea + floorArea;
     }
     hiddenAreaEl.value = calcArea;
 
-    // 3. RUSH FEE
-    let speedHrs = 0;
+    let sector = 'Special Purpose';
+    const bldgTypeVal = row.querySelector('.req-bldg-type-select').value;
+    if (bldgTypeVal === 'type_industrial') sector = 'Industrial';
+    else if (bldgTypeVal === 'type_office') sector = 'Office';
+    else if (bldgTypeVal === 'type_retail') sector = 'Retail';
+
+    // 3. OVERSIZE "QUOTE REQUIRED" INTERCEPTOR
+    let needsManualQuote = false;
+    if (sector === 'Office' && calcArea > 4999) needsManualQuote = true;
+    if (sector === 'Industrial' && calcArea > 9999) needsManualQuote = true;
+    if (sector === 'Retail' && calcArea > 14999) needsManualQuote = true;
+
+    if (needsManualQuote) {
+        breakdownEl.innerHTML = `<div style="margin-bottom: 4px; color: #ea580c; font-weight: 700; font-size: 13px;">Manual Quote Required</div><span style="font-size: 10px; color: #64748b; line-height: 1.3; display: inline-block;">Due to the sheer scale of this property, an automated estimate is not possible. A senior surveyor will review this request and provide a custom quote.</span>`;
+        totalEl.innerText = 'Quote';
+        totalEl.style.color = '#ea580c';
+        hiddenCostEl.value = 0;
+        
+        row.dataset.breakdownInsp = '0';
+        row.dataset.breakdownRep = '0';
+        row.dataset.breakdownTrav = '0';
+        row.dataset.discountApplied = 0;
+        
+        if (descSpan) descSpan.innerHTML = '<strong>Major Scale Asset:</strong> This property exceeds standard complexity modeling and requires a specialized review.';
+        row.dataset.sizeCategory = 'Major Scale / Custom Quote';
+        return; 
+    }
+
+    // 4. RUSH FEE TEXT ONLY
     let speedText = "Standard";
     if (deadlineStr) {
         const diffDays = Math.ceil((new Date(deadlineStr) - new Date()) / (1000 * 60 * 60 * 24));
         if (diffDays <= 10) {
-            speedHrs = getVal('rush_fee_hrs') || 4; 
             speedText = "Rush / Urgent";
         }
     }
 
-    // 4. MULTI-OFFICE HYBRID ROUTING ENGINE
-    let travelHrs = parseFloat(row.dataset.cachedTravel) || 0;
+    // 5. MAPBOX TRAVEL CALCULATION
+    let travelHrs = parseFloat(row.dataset.cachedTravel);
+    if (isNaN(travelHrs)) travelHrs = 0; 
     let travelText = row.dataset.cachedTravelText || "Pending Route";
     const fullAddr = `${addressStr}, ${regionStr}, ${countryStr}`;
     
@@ -353,7 +407,12 @@ window.calculateRowEstimate = async (row) => {
             
             if (geoJson.features && geoJson.features.length > 0) {
                 const [destLng, destLat] = geoJson.features[0].center;
-                const homeOffice = getClosestLocation(destLat, destLng, openOffices);
+                
+                let validOffices = (state.officesData || []).filter(o => new Date() >= new Date(o.open_date));
+                if (validOffices.length === 0) {
+                    validOffices = [{ id: 'fallback', name: 'Auckland HQ', lat: -36.8485, lng: 174.7633, apt_drive_hrs: 0.5 }];
+                }
+                const homeOffice = getClosestLocation(destLat, destLng, validOffices);
                 
                 const dirRes = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${homeOffice.lng},${homeOffice.lat};${destLng},${destLat}?access_token=${MAPBOX_TOKEN}`);
                 const dirJson = await dirRes.json();
@@ -371,10 +430,10 @@ window.calculateRowEstimate = async (row) => {
                             const localDriveJson = await localDriveRes.json();
                             
                             const localDriveHrs = (localDriveJson.routes && localDriveJson.routes.length > 0) 
-                                ? (localDriveJson.routes[0].duration / 3600) : 0.5;
+                                ? (localDriveJson.routes[0].duration / 3600) : 0.25;
 
                             const flightHrs = flightMins / 60;
-                            const oneWayFlightTripHrs = Number(homeOffice.apt_drive_hrs) + flightHrs + RENTAL_ADMIN_HRS + localDriveHrs;
+                            const oneWayFlightTripHrs = Number(homeOffice.apt_drive_hrs || 0.5) + flightHrs + RENTAL_ADMIN_HRS + localDriveHrs;
                             
                             if (oneWayFlightTripHrs < oneWayDriveHrs) {
                                 travelHrs = oneWayFlightTripHrs * 2; 
@@ -392,80 +451,56 @@ window.calculateRowEstimate = async (row) => {
                         travelText = `Drive from ${homeOffice.name}`;
                     }
                     
-                    // Travel time is mathematically precise, no minimum floor used.
                     travelHrs = Math.min(MAX_TRAVEL_HRS, travelHrs); 
-                    travelHrs = Math.round(travelHrs * 10) / 10; 
+                    travelHrs = Math.round(travelHrs); 
+                    if (travelHrs < 1) travelHrs = 1;
                 }
             }
         } catch(e) { 
             console.log("Routing failed.", e); 
-            travelHrs = 1.0; 
+            travelHrs = 1; 
+            travelText = "Fallback Route (API Error)";
         }
         row.dataset.cachedTravel = travelHrs;
         row.dataset.cachedTravelText = travelText;
+    } else if (!addressStr) {
+        travelHrs = 0; 
+        travelText = "Pending Address";
     } else {
-        travelText = row.dataset.cachedTravelText;
+        travelHrs = parseFloat(row.dataset.cachedTravel) || 0;
+        travelText = row.dataset.cachedTravelText || "Pending Route";
     }
 
-    // 5. MATRIX-DRIVEN INSPECTION & REPORT ENGINE
+    // 6. MATRIX-DRIVEN INSPECTION & REPORT ENGINE
     let matrixInspHrs = 0;
     let matrixRepHrs = 0;
-    
-    let sector = 'Special Purpose';
-    const bldgTypeVal = row.querySelector('.req-bldg-type-select').value;
-    if (bldgTypeVal === 'type_industrial') sector = 'Industrial';
-    else if (bldgTypeVal === 'type_office') sector = 'Office';
-    else if (bldgTypeVal === 'type_retail') sector = 'Retail';
+    const compVal = row.querySelector('.req-complexity-select').value; 
 
-    const compVal = row.querySelector('.req-complexity-select').value; // 'simple', 'standard', 'complex'
-    const descSpan = row.querySelector('.complexity-span-text');
+    if (state.estimationMatrix && state.estimationMatrix.length > 0) {
+        const match = state.estimationMatrix.find(m => {
+            const min = Number(m.min_sqm) || 0;
+            const max = m.max_sqm !== null ? Number(m.max_sqm) : Infinity;
+            return m.sector === sector && calcArea >= min && calcArea < max;
+        });
 
-    // UNBREAKABLE FALLBACK MATRIX
-    const fallbackMatrix = [
-        { sector: 'Office', size_category: 'Small Suite', min_sqm: 0, max_sqm: 500, simple_def: 'Open plan, standard lighting & HVAC, no complex tenant fit-out.', simple_insp_hrs: 2, simple_rep_hrs: 3, standard_def: 'Enclosed meeting rooms, kitchenette, standard partitioned office services.', standard_insp_hrs: 3, standard_rep_hrs: 4, complex_def: 'High-density layout, specialized comms/server room, or medical/consulting use.', complex_insp_hrs: 4, complex_rep_hrs: 5 },
-        { sector: 'Office', size_category: 'Medium (1–2 Floors)', min_sqm: 500, max_sqm: 2000, simple_def: 'Mostly open plan, uniform services across the floor, basic amenities.', simple_insp_hrs: 4, simple_rep_hrs: 5, standard_def: 'Mix of open plan and enclosed offices, standard staff amenities and typical HVAC zones.', standard_insp_hrs: 6, standard_rep_hrs: 7, complex_def: 'Inter-tenancy stairs, heavy IT infrastructure, high-spec cafeteria, or end-of-trip facilities.', complex_insp_hrs: 6, complex_rep_hrs: 8 },
-        { sector: 'Office', size_category: 'Large (Multi-Floor)', min_sqm: 2000, max_sqm: 5000, simple_def: 'Warm-shell condition, ready for tenant fit-out, basic base-building MEP.', simple_insp_hrs: 6, simple_rep_hrs: 8, standard_def: 'Typical corporate fit-out over multiple floors, standard HVAC zoning and security.', standard_insp_hrs: 8, standard_rep_hrs: 12, complex_def: 'High-security zones, auditoriums, specialized HVAC, or backup generators.', complex_insp_hrs: 10, complex_rep_hrs: 16 },
-        { sector: 'Office', size_category: 'Major / Tower Scale', min_sqm: 5000, max_sqm: null, simple_def: 'Base-build condition, uniform open floorplates, basic central plant.', simple_insp_hrs: 8, simple_rep_hrs: 12, standard_def: 'Standard multi-tenant corporate tower, typical central plant and lift services.', standard_insp_hrs: 12, standard_rep_hrs: 20, complex_def: 'Premium/A-grade complex fit-outs, heavy integrated tech, multiple central plant rooms.', complex_insp_hrs: 16, complex_rep_hrs: 24 },
-        { sector: 'Industrial', size_category: 'Small Unit', min_sqm: 0, max_sqm: 500, simple_def: 'Basic shell, no specialized plant, dry storage, minimal office space.', simple_insp_hrs: 2, simple_rep_hrs: 3, standard_def: 'Small office/amenity block attached, 3-phase power, light trade use.', standard_insp_hrs: 3, standard_rep_hrs: 4, complex_def: 'Food-grade prep area, small cool room, or heavy extraction systems.', complex_insp_hrs: 4, complex_rep_hrs: 5 },
-        { sector: 'Industrial', size_category: 'Medium Warehouse', min_sqm: 500, max_sqm: 2000, simple_def: 'Open warehouse, minimal office ratio, basic lighting and ventilation.', simple_insp_hrs: 3, simple_rep_hrs: 4, standard_def: 'Standard manufacturing/logistics, partial mezzanine, typical MEP.', standard_insp_hrs: 4, standard_rep_hrs: 6, complex_def: 'Specialized manufacturing, gantry cranes, dangerous goods (DG) storage.', complex_insp_hrs: 6, complex_rep_hrs: 8 },
-        { sector: 'Industrial', size_category: 'Large Standalone', min_sqm: 2000, max_sqm: 5000, simple_def: 'Bulk dry storage, simple portal frame, low MEP needs.', simple_insp_hrs: 4, simple_rep_hrs: 6, standard_def: 'Logistics hub, moderate racking, standard office and yard component.', standard_insp_hrs: 6, standard_rep_hrs: 8, complex_def: 'Cold storage, heavy manufacturing plant, complex environmental controls.', complex_insp_hrs: 8, complex_rep_hrs: 12 },
-        { sector: 'Industrial', size_category: 'Very Large / Bulk', min_sqm: 5000, max_sqm: 10000, simple_def: 'Open bulk warehouse, minimal compartmentalization or specialized zones.', simple_insp_hrs: 6, simple_rep_hrs: 8, standard_def: 'Standard distribution center, multiple loading docks, standard plant.', standard_insp_hrs: 8, standard_rep_hrs: 12, complex_def: 'Extensive temperature-controlled zones, automated sorting systems.', complex_insp_hrs: 12, complex_rep_hrs: 16 },
-        { sector: 'Industrial', size_category: 'Mega / DC Scale', min_sqm: 10000, max_sqm: null, simple_def: 'Huge open dry-goods storage, minimal complex operational zones.', simple_insp_hrs: 8, simple_rep_hrs: 12, standard_def: 'Standard FMCG logistics, extensive but standard dock leveling and racking.', standard_insp_hrs: 12, standard_rep_hrs: 16, complex_def: 'High-tech ASRS (Automated Storage), massive refrigeration plant, heavy industrial processes.', complex_insp_hrs: 16, complex_rep_hrs: 24 },
-        { sector: 'Retail', size_category: 'Small Shop / High-St', min_sqm: 0, max_sqm: 500, simple_def: 'Basic retail shell, no food prep, standard HVAC, single tenant.', simple_insp_hrs: 2, simple_rep_hrs: 3, standard_def: 'Cafe/light F&B with standard extraction, grease trap, and basic kitchen.', standard_insp_hrs: 3, standard_rep_hrs: 5, complex_def: 'Full commercial kitchen, intensive MEP, or pharmacy/medical use.', complex_insp_hrs: 4, complex_rep_hrs: 6 },
-        { sector: 'Retail', size_category: 'Medium / Metro Supermarket', min_sqm: 500, max_sqm: 2500, simple_def: 'Open format retail (e.g., clothing/homeware), basic services.', simple_insp_hrs: 3, simple_rep_hrs: 5, standard_def: 'Convenience supermarket, basic deli/bakery, small display fridges.', standard_insp_hrs: 5, standard_rep_hrs: 8, complex_def: 'High-spec food market, extensive refrigeration, intensive lighting/HVAC.', complex_insp_hrs: 7, complex_rep_hrs: 10 },
-        { sector: 'Retail', size_category: 'Large / Full-Line Supermarket', min_sqm: 2500, max_sqm: 5000, simple_def: 'Large format dry retail (e.g., furniture), uniform open space.', simple_insp_hrs: 4, simple_rep_hrs: 6, standard_def: 'Standard supermarket layout, moderate plant requirements, standard BOH.', standard_insp_hrs: 8, standard_rep_hrs: 12, complex_def: 'Full-service supermarket (butchery, bakery, massive CO₂ plant, heavy extraction).', complex_insp_hrs: 12, complex_rep_hrs: 18 },
-        { sector: 'Retail', size_category: 'Big-Box / LFR Centre', min_sqm: 5000, max_sqm: 15000, simple_def: 'Basic big-box shell (e.g., hardware), minimal partitions, open plan.', simple_insp_hrs: 6, simple_rep_hrs: 8, standard_def: 'LFR centre with multiple standard tenancies, typical amenities.', standard_insp_hrs: 10, standard_rep_hrs: 14, complex_def: 'Mix of LFR and heavy F&B, complex roof plant, highly specialized tenancies.', complex_insp_hrs: 14, complex_rep_hrs: 20 },
-        { sector: 'Retail', size_category: 'Regional Mall', min_sqm: 15000, max_sqm: null, simple_def: '(Rarely simple) Open concourses, basic retail shells, uniform systems.', simple_insp_hrs: 10, simple_rep_hrs: 14, standard_def: 'Standard mall, mix of fashion/services, standard food court and plant.', standard_insp_hrs: 16, standard_rep_hrs: 24, complex_def: 'Major food courts, cinemas, medical centres, massive centralized plant.', complex_insp_hrs: 24, complex_rep_hrs: 40 }
-    ];
-
-    const matrixData = (state.estimationMatrix && state.estimationMatrix.length > 0) ? state.estimationMatrix : fallbackMatrix;
-
-    const match = matrixData.find(m => {
-        const min = Number(m.min_sqm) || 0;
-        const max = m.max_sqm !== null ? Number(m.max_sqm) : Infinity;
-        return m.sector === sector && calcArea >= min && calcArea < max;
-    });
-
-    if (match) {
-        if (descSpan) {
-            descSpan.innerHTML = `<strong>${compVal.charAt(0).toUpperCase() + compVal.slice(1)}:</strong> ${match[`${compVal}_def`]}`;
+        if (match) {
+            if (descSpan) {
+                descSpan.innerHTML = `<strong>${compVal.charAt(0).toUpperCase() + compVal.slice(1)}:</strong> ${match[`${compVal}_def`] || 'Definition missing in DB.'}`;
+            }
+            matrixInspHrs = Number(match[`${compVal}_insp_hrs`]) || 0;
+            matrixRepHrs = Number(match[`${compVal}_rep_hrs`]) || 0;
+            row.dataset.sizeCategory = match.size_category;
+        } else {
+            if (descSpan) descSpan.innerHTML = '<strong>Special Purpose:</strong> Area is outside standard modeling.';
+            row.dataset.sizeCategory = 'Special Purpose / Custom Scale';
         }
-        matrixInspHrs = Number(match[`${compVal}_insp_hrs`]) || 0;
-        matrixRepHrs = Number(match[`${compVal}_rep_hrs`]) || 0;
-        row.dataset.sizeCategory = match.size_category;
     } else {
-        if (descSpan) descSpan.innerHTML = '<strong>Special Purpose:</strong> Area is outside standard modeling. Fallback estimates apply.';
-        row.dataset.sizeCategory = 'Special Purpose / Custom Scale';
+        if (descSpan) descSpan.innerHTML = '<strong style="color:#d1283e;">Database Error:</strong> estimation_matrix table failed to load from Supabase.';
+        row.dataset.sizeCategory = 'Matrix Error';
     }
 
-    const reportTypeHrs = getVal(typeSelect.value ? `rep_${typeSelect.value}` : null) || 0;
-
-    let inspectionHrs = matrixInspHrs > 0 ? matrixInspHrs : 2.0;
-    inspectionHrs = Math.round(inspectionHrs * 10) / 10; 
-
-    // Pure Report Calculation without minimum floors overriding it
-    let reportHrs = matrixRepHrs > 0 ? (matrixRepHrs + reportTypeHrs + speedHrs) : (8.0 + reportTypeHrs + speedHrs);
-    reportHrs = Math.round(reportHrs * 10) / 10; 
+    let inspectionHrs = matrixInspHrs;
+    let reportHrs = matrixRepHrs;
 
     // 7. TOTAL CALCULATION
     const totalHrs = travelHrs + inspectionHrs + reportHrs;
@@ -507,7 +542,7 @@ window.calculateRowEstimate = async (row) => {
         }
     }
 
-    breakdownEl.innerHTML = `Travel: ${window.formatTimeReadable(travelHrs)} &nbsp;|&nbsp; Insp: ${window.formatTimeReadable(inspectionHrs)} &nbsp;|&nbsp; Report: ${window.formatTimeReadable(reportHrs)} <br>${discountTag} ${nextTierUpsell}`;
+    breakdownEl.innerHTML = `Travel: ${travelHrs}h &nbsp;|&nbsp; Insp: ${inspectionHrs}h &nbsp;|&nbsp; Report: ${reportHrs}h <br>${discountTag} ${nextTierUpsell}`;
     
     totalEl.innerText = `$${finalFee.toLocaleString()}`;
     totalEl.style.color = "#0284c7"; 
@@ -518,6 +553,8 @@ window.calculateRowEstimate = async (row) => {
     row.dataset.breakdownTrav = travelHrs.toFixed(1);
     row.dataset.discountApplied = vipStats.discount; 
 };
+
+// ... (Rest of your modals.js remains identically the same)
 
 window.openRequestModal = async () => {
     document.getElementById('requestModalOverlay').classList.add('active');
@@ -617,17 +654,17 @@ document.getElementById('requestReportForm')?.addEventListener('submit', async (
             
             const sizeCategory = row.dataset.sizeCategory || "Special Purpose / Custom";
             
-            const trvH = parseFloat(row.dataset.breakdownTrav || '0.5');
-            const inspH = parseFloat(row.dataset.breakdownInsp || '2.0');
-            const repH = parseFloat(row.dataset.breakdownRep || '10.0');
+            const trvH = parseFloat(row.dataset.breakdownTrav || '0.0');
+            const inspH = parseFloat(row.dataset.breakdownInsp || '0.0');
+            const repH = parseFloat(row.dataset.breakdownRep || '0.0');
             const totalH = trvH + inspH + repH;
 
             const complexityBreakdown = `
 --- HOURS & COMPLEXITY PROFILE ---
-Calculated Time: ${window.formatTimeReadable(totalH)} Total
-• Travel: ${window.formatTimeReadable(trvH)} (Exact Route Math)
-• Inspection: ${window.formatTimeReadable(inspH)} (Baseline + Complexity)
-• Reporting: ${window.formatTimeReadable(repH)} (Drafting, Peer Review & Uploads)
+Calculated Time: ${totalH > 0 ? totalH + 'h Total' : 'Manual Quote Required'}
+• Travel: ${trvH}h 
+• Inspection: ${inspH}h 
+• Reporting: ${repH}h
 
 Areas: Site ${siteArea.toLocaleString()} sqm | Floor ${floorArea.toLocaleString()} sqm
 Scale: ${sizeCategory}
