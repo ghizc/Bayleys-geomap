@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bayleys Property Survey System</title>
     
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00264b">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Bayleys Survey">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('PWA Service Worker Registered!'))
+                    .catch(err => console.error('PWA Registration Failed:', err));
+            });
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAfsH1DWFwEOhVX3LDCmiZ5GazaTPgwWYQ&v=alpha&libraries=marker"></script>
     <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
