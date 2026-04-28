@@ -45,127 +45,196 @@ export function renderBICharts(premises, reports, type = 'growth') {
     const ctx = document.getElementById('biChart');
     if (!ctx) return;
 
-    // 1. Calculate Average Turnaround Time (Current Year Only)
+    // 1. Calculate Average Turnaround Time
     const currentYear = new Date().getFullYear();
-    const reportsThisYear = reports.filter(r => {
-        if (!r.delivery_date || !r.inspection_date) return false;
-        const deliveryDate = new Date(r.delivery_date);
-        return deliveryDate.getFullYear() === currentYear;
-    });
-
-    let avgTurnaround = '-';
+    const reportsThisYear = reports.filter(r => r.delivery_date && r.inspection_date && new Date(r.delivery_date).getFullYear() === currentYear);
     
+    let avgTurnaround = '-';
     if (reportsThisYear.length > 0) {
-        const totalDays = reportsThisYear.reduce((sum, r) => {
-            const start = new Date(r.inspection_date);
-            const end = new Date(r.delivery_date);
-            const diffTime = end - start;
-            return sum + Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-        }, 0);
-
+        const totalDays = reportsThisYear.reduce((sum, r) => sum + Math.max(0, Math.ceil((new Date(r.delivery_date) - new Date(r.inspection_date)) / (1000 * 60 * 60 * 24))), 0);
         avgTurnaround = Math.round(totalDays / reportsThisYear.length) + ' Days';
     }
     
     const kpiEl = document.getElementById('kpiTurnaround');
-    if (kpiEl) {
-        kpiEl.innerHTML = `${currentYear} Avg Turnaround: <span>${avgTurnaround}</span>`;
-    }
+    if (kpiEl) kpiEl.innerHTML = `${currentYear} Avg Turnaround: <span>${avgTurnaround}</span>`;
 
-    // 2. Destroy existing chart before drawing a new one
     if (window.biChartInstance instanceof Chart) window.biChartInstance.destroy();
     const canvasContext = ctx.getContext('2d');
 
-    // 3. Render Requested Chart
-    if (type === 'growth') {
-        const months = [], premiseCounts = [], reportCounts = [];
+    // Global Chart Formatting for Material UI Feel
+    Chart.defaults.font.family = "'Segoe UI', 'Roboto', sans-serif";
+    Chart.defaults.color = '#64748b';
+    const chartPadding = { left: 10, right: 10, top: 10, bottom: 10 };
+
+    // --- 1. REVENUE (NZ Financial Year Logic) ---
+    if (type === 'revenue') {
+        const fyTotals = {};
         
-        const premiseFirstContact = {}; 
+        // Helper: NZ FY starts April 1 (Month index 3)
+        const getNZFY = (dateStr) => {
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return null;
+            return d.getMonth() >= 3 ? d.getFullYear() + 1 : d.getFullYear();
+        };
+
         reports.forEach(r => {
-            const date = r.inspection_date ? new Date(r.inspection_date) : (r.delivery_date ? new Date(r.delivery_date) : new Date(r.created_at));
-            if (!premiseFirstContact[r.premise_id] || date < premiseFirstContact[r.premise_id]) {
-                premiseFirstContact[r.premise_id] = date;
+            if (normalizeStatus(r.status) === 'cancelled') return;
+            const budget = Number(r.budget) || 0;
+            if (budget <= 0) return;
+
+            const dateStr = r.delivery_date || r.inspection_date || r.created_at;
+            const fy = getNZFY(dateStr);
+            if (fy) fyTotals[fy] = (fyTotals[fy] || 0) + budget;
+        });
+
+        // Determine Current, Last, and Best FY
+        const now = new Date();
+        const currentFY = now.getMonth() >= 3 ? now.getFullYear() + 1 : now.getFullYear();
+        const lastFY = currentFY - 1;
+
+        let bestFY = null;
+        let bestRev = -1;
+        Object.keys(fyTotals).forEach(fyStr => {
+            const fy = parseInt(fyStr);
+            if (fy !== currentFY && fy !== lastFY && fyTotals[fy] > bestRev) {
+                bestRev = fyTotals[fy];
+                bestFY = fy;
             }
         });
 
-        for (let i = 5; i >= 0; i--) {
-            const d = new Date(); 
-            d.setDate(1);
-            d.setMonth(d.getMonth() - i);
-            months.push(d.toLocaleString('default', { month: 'short', year: '2-digit' }));
+        // Fallback if there is no older history
+        if (!bestFY) bestFY = lastFY - 1; 
 
-            const reportsInMonth = reports.filter(r => {
-                const targetDate = r.inspection_date ? new Date(r.inspection_date) : (r.delivery_date ? new Date(r.delivery_date) : new Date(r.created_at));
-                return targetDate.getMonth() === d.getMonth() && targetDate.getFullYear() === d.getFullYear();
-            }).length;
-            reportCounts.push(reportsInMonth);
-
-            const newPremisesInMonth = Object.values(premiseFirstContact).filter(firstDate => 
-                firstDate.getMonth() === d.getMonth() && firstDate.getFullYear() === d.getFullYear()
-            ).length;
-            premiseCounts.push(newPremisesInMonth);
-        }
-
-        const gradBlue = canvasContext.createLinearGradient(0, 0, 0, 200);
-        gradBlue.addColorStop(0, 'rgba(49, 130, 206, 0.5)'); gradBlue.addColorStop(1, 'rgba(49, 130, 206, 0.0)');
-        const gradGreen = canvasContext.createLinearGradient(0, 0, 0, 200);
-        gradGreen.addColorStop(0, 'rgba(16, 185, 129, 0.5)'); gradGreen.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
-
-        window.biChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: { labels: months, datasets: [
-                { label: 'Reports', data: reportCounts, borderColor: '#3182ce', backgroundColor: gradBlue, borderWidth: 3, fill: true, tension: 0.4, pointRadius: 3 },
-                { label: 'Premises', data: premiseCounts, borderColor: '#10b981', backgroundColor: gradGreen, borderWidth: 3, fill: true, tension: 0.4, pointRadius: 3 }
-            ]},
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: {boxWidth:10, font:{size:10}} } }, scales: { x: {grid: {display: false}}, y: {beginAtZero: true, border: {display:false}} } }
-        });
-
-    } else if (type === 'sector') {
-        const sectorCounts = {};
-        premises.forEach(p => { const s = p.sector || 'Unassigned'; sectorCounts[s] = (sectorCounts[s] || 0) + 1; });
-        
-        window.biChartInstance = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(sectorCounts),
-                datasets: [{ data: Object.values(sectorCounts), backgroundColor: ['#00264b', '#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#f43f5e', '#64748b'], borderWidth: 2, borderColor: '#fff' }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: {size: 10} } } } }
-        });
-
-    } else if (type === 'workload') {
-        const surveyors = {};
-        reports.filter(r => !['complete','invoice','cancelled'].includes(normalizeStatus(r.status))).forEach(r => {
-            const s = r.surveyed_by || 'Unassigned'; surveyors[s] = (surveyors[s] || 0) + 1;
-        });
+        const revenueData = {
+            [`Current FY${currentFY.toString().slice(-2)}`]: fyTotals[currentFY] || 0,
+            [`Last FY${lastFY.toString().slice(-2)}`]: fyTotals[lastFY] || 0,
+            [`Best (FY${bestFY.toString().slice(-2)})`]: fyTotals[bestFY] || 0
+        };
 
         window.biChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: Object.keys(surveyors),
-                datasets: [{ label: 'Active Jobs', data: Object.values(surveyors), backgroundColor: '#0284c7', borderRadius: 4 }]
+                labels: Object.keys(revenueData),
+                datasets: [{
+                    data: Object.values(revenueData),
+                    // Material Colors: Primary Blue, Slate Grey, Amber
+                    backgroundColor: ['#1976D2', '#94a3b8', '#FBC02D'],
+                    borderRadius: 4,
+                    maxBarThickness: 60
+                }]
             },
-            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } }, y: {grid: {display: false}} } }
+            options: {
+                responsive: true, maintainAspectRatio: false, layout: { padding: chartPadding },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (c) => '$' + c.raw.toLocaleString('en-NZ') } }
+                },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true, border: {display:false}, ticks: { callback: (v) => '$' + (v / 1000) + 'k' } }
+                }
+            }
         });
 
-    } else if (type === 'aging') {
+    } 
+    // --- 2. GROWTH ---
+    else if (type === 'growth') {
+        const months = [], premiseCounts = [], reportCounts = [];
+        const premiseFirstContact = {}; 
+        reports.forEach(r => {
+            const date = r.inspection_date ? new Date(r.inspection_date) : (r.delivery_date ? new Date(r.delivery_date) : new Date(r.created_at));
+            if (!premiseFirstContact[r.premise_id] || date < premiseFirstContact[r.premise_id]) premiseFirstContact[r.premise_id] = date;
+        });
+
+        for (let i = 5; i >= 0; i--) {
+            const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i);
+            months.push(d.toLocaleString('default', { month: 'short', year: '2-digit' }));
+            reportCounts.push(reports.filter(r => {
+                const targetDate = r.inspection_date ? new Date(r.inspection_date) : (r.delivery_date ? new Date(r.delivery_date) : new Date(r.created_at));
+                return targetDate.getMonth() === d.getMonth() && targetDate.getFullYear() === d.getFullYear();
+            }).length);
+            premiseCounts.push(Object.values(premiseFirstContact).filter(firstDate => firstDate.getMonth() === d.getMonth() && firstDate.getFullYear() === d.getFullYear()).length);
+        }
+
+        const gradBlue = canvasContext.createLinearGradient(0, 0, 0, 200);
+        gradBlue.addColorStop(0, 'rgba(25, 118, 210, 0.2)'); gradBlue.addColorStop(1, 'rgba(25, 118, 210, 0.0)');
+        const gradGreen = canvasContext.createLinearGradient(0, 0, 0, 200);
+        gradGreen.addColorStop(0, 'rgba(56, 142, 60, 0.2)'); gradGreen.addColorStop(1, 'rgba(56, 142, 60, 0.0)');
+
+        window.biChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { labels: months, datasets: [
+                { label: 'Reports', data: reportCounts, borderColor: '#1976D2', backgroundColor: gradBlue, borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4 },
+                { label: 'Premises', data: premiseCounts, borderColor: '#388E3C', backgroundColor: gradGreen, borderWidth: 3, fill: true, tension: 0.4, pointRadius: 4 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: chartPadding }, plugins: { legend: { position: 'top', labels: {usePointStyle: true, boxWidth: 8} } }, scales: { x: {grid: {display: false}}, y: {beginAtZero: true, border: {display:false}} } }
+        });
+
+    } 
+    // --- 3. SECTORS (Strict Blank Removal) ---
+    else if (type === 'sector') {
+        const sectorCounts = {};
+        premises.forEach(p => { 
+            const s = (p.sector || '').trim();
+            // 🌟 THE FIX: If the sector is completely blank, we STOP and ignore it entirely!
+            if (!s || s === '') return; 
+            sectorCounts[s] = (sectorCounts[s] || 0) + 1; 
+        });
+        
+        // Material UI Palette
+        const materialColors = ['#1976D2', '#388E3C', '#FBC02D', '#D32F2F', '#7B1FA2', '#0097A7', '#F57C00', '#C2185B'];
+
+        window.biChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels: Object.keys(sectorCounts), datasets: [{ data: Object.values(sectorCounts), backgroundColor: materialColors, borderWidth: 2, borderColor: '#fff' }] },
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: chartPadding }, cutout: '70%', plugins: { legend: { position: 'right', labels: { usePointStyle: true, boxWidth: 8, font: {size: 11} } } } }
+        });
+
+    } 
+    // --- 4. WORKLOAD (Strict Inclusion List) ---
+    else if (type === 'workload') {
+        const surveyors = {};
+        
+        // 🌟 THE FIX: ONLY look at jobs explicitly in the active phases
+        const activeReports = reports.filter(r => ['new', 'inspection', 'report', 'advice'].includes(normalizeStatus(r.status)));
+        
+        activeReports.forEach(r => {
+            const s = (r.surveyed_by || '').trim();
+            // 🌟 THE FIX: If no surveyor is assigned, ignore it completely so "Unassigned" doesn't skew the chart!
+            if (!s || s === '') return; 
+            surveyors[s] = (surveyors[s] || 0) + 1;
+        });
+
+        // Sort Highest to Lowest
+        const sortedSurveyors = Object.fromEntries(Object.entries(surveyors).sort(([,a], [,b]) => b - a));
+
+        window.biChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: Object.keys(sortedSurveyors), datasets: [{ label: 'Active Jobs', data: Object.values(sortedSurveyors), backgroundColor: '#0097A7', borderRadius: 4, maxBarThickness: 30 }] },
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: chartPadding }, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } }, y: {grid: {display: false}} } }
+        });
+
+    } 
+    // --- 5. JOB AGING (Strict Active Only) ---
+    else if (type === 'aging') {
         const aging = {'0-7 Days': 0, '8-14 Days': 0, '15-30 Days': 0, '30+ Days': 0};
         const now = new Date();
-        reports.filter(r => !['complete','invoice'].includes(normalizeStatus(r.status))).forEach(r => {
+        
+        // 🌟 THE FIX: Only age jobs that are actively in the pipeline
+        reports.filter(r => ['new', 'inspection', 'report', 'advice'].includes(normalizeStatus(r.status))).forEach(r => {
             const start = r.inspection_date ? new Date(r.inspection_date) : new Date(r.created_at || now);
             const days = Math.floor((now - start) / (1000 * 60 * 60 * 24));
-            if (days <= 7) aging['0-7 Days']++;
-            else if (days <= 14) aging['8-14 Days']++;
-            else if (days <= 30) aging['15-30 Days']++;
+            
+            if (days <= 7) aging['0-7 Days']++; 
+            else if (days <= 14) aging['8-14 Days']++; 
+            else if (days <= 30) aging['15-30 Days']++; 
             else aging['30+ Days']++;
         });
 
         window.biChartInstance = new Chart(ctx, {
             type: 'bar',
-            data: {
-                labels: Object.keys(aging),
-                datasets: [{ label: 'Jobs', data: Object.values(aging), backgroundColor: ['#10b981', '#f59e0b', '#f43f5e', '#9f1239'], borderRadius: 4 }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: {grid: {display: false}} } }
+            data: { labels: Object.keys(aging), datasets: [{ label: 'Active Jobs', data: Object.values(aging), backgroundColor: ['#388E3C', '#FBC02D', '#F57C00', '#D32F2F'], borderRadius: 4, maxBarThickness: 50 }] },
+            options: { responsive: true, maintainAspectRatio: false, layout: { padding: chartPadding }, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: {grid: {display: false}} } }
         });
     }
 }
@@ -542,7 +611,7 @@ export function showDetail(p) {
         window.recenterMap = () => {
             const curP = state.currentViewedPremise;
             if (curP && state.mapInstance && curP.lat) {
-                state.mapInstance.flyTo({ center: [curP.lng, curP.lat], zoom: 19.5, pitch: 70 });
+                state.mapInstance.flyTo({ center: [curP.lng, curP.lat], range: 200, pitch: 45 });
             }
         };
     }
@@ -628,7 +697,7 @@ export function showDetail(p) {
     }
 
     if (state.mapInstance && p.lat) {
-        state.mapInstance.flyTo({ center: [p.lng, p.lat], zoom: 19.5, pitch: 70 });
+        state.mapInstance.flyTo({ center: [p.lng, p.lat], range: 200, pitch: 45 });
     }
 }
 
