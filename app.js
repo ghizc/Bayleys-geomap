@@ -575,14 +575,14 @@ window.onload = async () => {
         // Centers perfectly over New Zealand at a wide zoom
         initMap('loginMapBackground', [174.0, -41.0], 5.5, 0, 0);
         
-        // --- NEW: Load the Database Rules, Airports, & Offices ---
+        // Load the Database Rules & Airports
         import('./api.js').then(async (apiMod) => {
             state.pricingRules = await apiMod.getPricingRules();
-            state.estimationMatrix = await apiMod.getEstimationMatrix();
+            state.estimationMatrix = await apiMod.getEstimationMatrix(); // <-- This was the missing link!
             state.airportsData = await apiMod.getAirports(); 
             state.officesData = await apiMod.getOffices();
             state.discountsData = await apiMod.getDiscounts();
-        });
+        }).catch(err => console.error("Error loading config data:", err));
         
         // Simple ping to wake up DB
         await supabase.from('clients').select('id', { count: 'exact', head: true });
@@ -684,7 +684,7 @@ document.getElementById('prevImgBtn').onclick = (e) => {
 };
 
 document.getElementById('closeDetailBtn').onclick = () => {
-    document.getElementById('propertyDetailPanel').classList.remove('active');
+    document.getElementById('propertyDetailPanel').classList.remove('active', 'minimized'); // Fixed to wipe minimized state
     state.currentViewedPremise = null;
     
     // Clear both highlights
@@ -694,12 +694,17 @@ document.getElementById('closeDetailBtn').onclick = () => {
     if (state.mapInstance) state.mapInstance.flyTo({ zoom: 14, pitch: 0 });
     
     if (document.getElementById('clientListScreen').classList.contains('active')) {
-        // THE FIX: Only pop the widgets back open if we are on a large desktop!
         const isMobile = window.innerWidth <= 900 || document.body.classList.contains('sim-mobile') || document.body.classList.contains('sim-tablet');
         toggleDashboardOverlay(!isMobile);
     } else if (document.getElementById('premisesScreen').classList.contains('active')) {
         document.getElementById('requestReportBtn').style.display = 'flex';
     }
+};
+
+// NEW: Minimize Panel Toggle
+document.getElementById('minimizeDetailBtn').onclick = (e) => {
+    e.stopPropagation();
+    document.getElementById('propertyDetailPanel').classList.toggle('minimized');
 };
 
 document.getElementById('backToAdminBtn').onclick = async () => {
